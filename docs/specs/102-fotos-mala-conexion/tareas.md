@@ -8,7 +8,7 @@ Marca cada tarea al terminarla (con sus pruebas y su commit).
 - [ ] Foto de avance a la cola: segunda compresión si pasa de 1 MB, copia a `pendientes/`, huella SHA-256 y tamaño
 - [ ] Foto opcional de la nota de remisión en el ingreso (dos operaciones con `depende_de`)
 - [ ] Regla de «liviana lista» y rechazo en cascada cuando la dependencia es rechazada
-- [ ] `src/sync/subidor.ts`: creación o consulta de la subida, partes faltantes con tiempo máximo de 20 s, completar (30 s), reinicios, rechazos
+- [ ] `src/sync/subidor.ts`: creación o consulta de la subida, partes faltantes con tiempo máximo de 20 s, completar (30 s), reinicios, rechazos y `SUBIDA_DISTINTA` (nueva subida con otro `idSubida`, mismo `fotoId`)
 - [ ] Enviador: livianos primero y un archivo a la vez; borrado del archivo local al confirmar o descartar
 - [ ] «Pendientes de envío»: miniatura y progreso «Subiendo foto · X de Y partes»
 - [ ] Pruebas de la spec
