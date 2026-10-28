@@ -11,8 +11,8 @@ Lee también `AGENTS.md`: es la guía oficial de Expo para agentes (consultar la
 ## Stack
 
 - Node 24 · Expo SDK 58 · React Native 0.88 · React 19.3 · TypeScript 6
-- Previsto: Expo Router (navegación por rol), login OIDC con Keycloak (roles `maestro` y `almacenero`)
-- Capa 1: base local y cola de envíos (por definir: `expo-sqlite` u otra) · Capa 3: TensorFlow Lite con `react-native-fast-tflite` (requiere *development build*, no funciona en Expo Go)
+- Previsto: Expo Router (navegación por rol), login OIDC con Keycloak mediante `expo-auth-session` (cliente `app-obra`, roles `maestro` y `almacenero`)
+- Capa 1: base local y cola de envíos con `expo-sqlite` (módulo oficial de Expo) · Capa 3: TensorFlow Lite con `react-native-fast-tflite` (requiere *development build*, no funciona en Expo Go)
 
 ## Comandos
 
