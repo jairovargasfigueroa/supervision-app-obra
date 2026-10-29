@@ -7,10 +7,12 @@ import { stockQuery, type TipoMovimiento } from '../api/materiales';
 import type { DetalleObra } from '../api/obras';
 import { MENSAJE_REGISTRADO } from '../formularios/movimiento';
 import { primerError, useMovimiento } from '../formularios/useMovimiento';
+import { presentacionEstadoStock } from '../nucleo/estado-stock';
 import { formatearCantidadMaterial } from '../nucleo/formato';
 import { useSesion } from '../sesion/sesion';
 import { radios, TAMANO_TACTIL_MINIMO, useTema } from '../tema';
 import { TituloObra } from './ConObra';
+import { EstadoChip } from './EstadoChip';
 import { EstadoError } from './EstadoError';
 import { EstadoVacio } from './EstadoVacio';
 import { SelectorMaterial } from './SelectorMaterial';
@@ -88,9 +90,12 @@ export function FormularioMovimiento({ tipo, obra }: Props) {
                         </Surface>
                       )}
                       {material && stock.isSuccess ? (
-                        <Text variant="bodyMedium" style={{ color: colors.textoSecundario }} testID="stock-material">
-                          Stock: {formatearCantidadMaterial(fila?.cantidad ?? 0, material.unidad, material.unidadPlural)}
-                        </Text>
+                        <View style={estilos.stock}>
+                          <Text variant="bodyMedium" style={{ color: colors.textoSecundario }} testID="stock-material">
+                            Stock: {formatearCantidadMaterial(fila?.cantidad ?? 0, material.unidad, material.unidadPlural)}
+                          </Text>
+                          {fila ? <EstadoChip {...presentacionEstadoStock(fila.estado)} /> : null}
+                        </View>
                       ) : null}
                       {error ? (
                         <HelperText type="error" visible>
@@ -235,6 +240,7 @@ const estilos = StyleSheet.create({
   centro: { flex: 1, justifyContent: 'center', padding: 16 },
   contenido: { padding: 16, gap: 12 },
   campo: { gap: 8 },
+  stock: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   tarjeta: { borderRadius: radios.tarjeta, overflow: 'hidden' },
   aviso: { borderRadius: radios.tarjeta, padding: 12 },
   contenidoBoton: { minHeight: TAMANO_TACTIL_MINIMO },

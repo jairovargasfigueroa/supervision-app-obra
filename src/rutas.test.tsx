@@ -565,3 +565,53 @@ describe('ingreso y salida de material (004)', () => {
     expect(ids[2]).not.toBe(ids[0]);
   });
 });
+
+describe('stock de la obra (004, criterio 9)', () => {
+  const fila = (codigo: string, nombre: string, cantidad: number, minimo: number, estado: string) => ({
+    materialId: codigo, codigo, nombre, unidad: 'bolsa', unidadPlural: 'bolsas', cantidad, minimo, estado,
+  });
+
+  beforeEach(() => {
+    obras['GET /obras/o1'] = () => jsonRespuesta(200, DETALLE);
+  });
+
+  const abrirStock = async () => {
+    await guardarTokens(sesionDe(['almacenero']));
+    await renderRouter('src/app', { initialUrl: '/obras/o1/stock' });
+  };
+
+  it('lista cada material con cantidad, mínimo y estado con los colores del ERP', async () => {
+    obras['GET /obras/o1/stock'] = () =>
+      jsonRespuesta(200, [
+        fila('ARE-01', 'Arena fina', 40, 100, 'BAJO'),
+        fila('CEM-IP30', 'Cemento IP-30', 120, 100, 'JUSTO'),
+        fila('LAD-6H', 'Ladrillo 6 huecos', 1, 0, 'OK'),
+      ]);
+    await abrirStock();
+    expect(await screen.findByText('ARE-01 · Arena fina')).toBeTruthy();
+    expect(screen.getByText('Cantidad: 40 bolsas')).toBeTruthy();
+    expect(screen.getAllByText('Mínimo: 100 bolsas')).toHaveLength(2);
+    expect(screen.getByText('Mínimo: 0 bolsas')).toBeTruthy();
+    expect(screen.getByText('Cantidad: 1 bolsa')).toBeTruthy();
+    expect(screen.getByTestId('chip-error')).toHaveTextContent('Bajo');
+    expect(screen.getByTestId('chip-atencion')).toHaveTextContent('Justo');
+    expect(screen.getByTestId('chip-exito')).toHaveTextContent('OK');
+    expect(screen.getByText('Edificio Las Palmas')).toBeTruthy();
+  });
+
+  it('sin filas muestra el estado vacío', async () => {
+    obras['GET /obras/o1/stock'] = () => jsonRespuesta(200, []);
+    await abrirStock();
+    expect(
+      await screen.findByText('Esta obra todavía no tiene materiales con movimientos ni mínimo definido.'),
+    ).toBeTruthy();
+  });
+
+  it('si Materiales no ve la obra, «Obra no encontrada» con «Reintentar»', async () => {
+    obras['GET /obras/o1/stock'] = () =>
+      jsonRespuesta(404, { codigo: 'OBRA_NO_ENCONTRADA' }, 'application/problem+json');
+    await abrirStock();
+    expect(await screen.findByText('Obra no encontrada')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Reintentar/ })).toBeTruthy();
+  });
+});

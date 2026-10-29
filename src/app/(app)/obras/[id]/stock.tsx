@@ -1,20 +1,14 @@
 import { useLocalSearchParams } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
 
-import { ConObra, TituloObra } from '../../../../componentes/ConObra';
+import { ConObra } from '../../../../componentes/ConObra';
+import { StockObra } from '../../../../componentes/StockObra';
 
-// Pantalla de obra del almacenero (004): por ahora solo la obra elegida.
+// Stock de la obra (004, criterio 9): cada material con su estado y los colores del ERP.
 export default function Pantalla() {
   const { id } = useLocalSearchParams<{ id: string }>();
   return (
     <ConObra key={id} id={id}>
-      {(obra) => (
-        <View style={estilos.contenido}>
-          <TituloObra obra={obra} />
-        </View>
-      )}
+      {(obra) => <StockObra obra={obra} />}
     </ConObra>
   );
 }
-
-const estilos = StyleSheet.create({ contenido: { padding: 16 } });

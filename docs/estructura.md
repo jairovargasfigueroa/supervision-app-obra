@@ -50,10 +50,11 @@ src/
                    foto.envio.ts (envío con reintento y qué hacer tras cada fallo), useFotoAvance.ts (estado de la pantalla)
   componentes/     BarraSuperior.tsx, PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
                    ObrasAsignadas.tsx (lista de GET /obras), ConObra.tsx (carga GET /obras/{id} para una
-                   pantalla de obra), FormularioMovimiento.tsx (ingreso y salida), SelectorMaterial.tsx (con
-                   búsqueda), SelectorPartida.tsx
+                   pantalla de obra), FormularioMovimiento.tsx (ingreso y salida), StockObra.tsx,
+                   SelectorMaterial.tsx (con búsqueda), SelectorPartida.tsx
   sync/            (capa 1) cola.ts, base-local.ts
-  nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod)
+  nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
+                   estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
                    imagen-simulada.ts (cámara, galería y compresión)
   tema.ts
@@ -88,6 +89,7 @@ src/
 - Cada pantalla carga la obra con `ConObra` (`GET /obras/{id}`: nombre y partidas) y lleva `key={id}`.
 - Ingreso y Salida comparten `FormularioMovimiento` (TanStack Form con el esquema Zod de `movimiento.esquema.ts` en `onChange` y `onSubmit`; los errores se muestran junto al campo cuando se tocó o tras pulsar el botón). Material: los activos del catálogo (`GET /materiales?soloActivos=true`, todas las páginas de 100) con búsqueda por código o nombre si son más de 8, y bajo la lista su stock en la obra (`GET /obras/{obraId}/stock`; sin fila, 0). Cantidad: texto con coma o punto, > 0 y hasta 3 decimales (`leerCantidad`). Ingreso: nota de remisión opcional (`notaRemision` solo si se escribió). Salida: partida de destino obligatoria (`SelectorPartida`).
 - `id` del registro (criterio 6): UUID de `expo-crypto` creado al abrir el formulario. «Registrar» envía `POST /movimientos` y, ante error de red, tiempo agotado o `503`, lo repite solo hasta 3 veces (1 s, 2 s, 4 s) con el mismo cuerpo (`conReintentos`). Si al final falla, el registro queda pendiente en memoria: pulsar otra vez con los mismos datos lo repite con el mismo `id` y el mismo `registradoEn`; si los datos cambiaron, es otro registro con otro `id` (`registroParaEnviar`). `201` y `200` (ya existía) son éxito: «Registrado», se vacía el formulario y se crea un `id` nuevo.
+- Stock (criterio 9): `GET /obras/{obraId}/stock` en tarjetas (código · nombre, cantidad y mínimo con su unidad en singular o plural, y el estado), en el orden del servicio (por código), con «tirar para actualizar». El estado va en `EstadoChip` con las etiquetas y tonos del ERP (`estado-stock.ts`: `BAJO` «Bajo» error, `JUSTO` «Justo» atención, `OK` «OK» éxito; fondo suave y texto del color fuerte) y arriba la regla de los estados, el mismo texto que el ERP. Sin filas: «Esta obra todavía no tiene materiales con movimientos ni mínimo definido.» (texto del ERP, 003). El mismo chip acompaña al stock del material en Ingreso y Salida.
 - Tras registrar (criterio 4), la fila del material en la caché del stock se reemplaza con el `stock` de la respuesta y se vuelve a pedir el stock de la obra.
 - Avisos: con `superaStock` (criterio 5), «La salida supera el stock registrado (stock: X). Queda como alerta para revisión», donde X es el stock que había antes de la salida (el `stock.cantidad` de la respuesta más la cantidad que salió) con su unidad. `409 PERIODO_CERRADO` (criterio 7): «El periodo AAAA-MM ya está cerrado», con el mes de `registradoEn` en La Paz (`periodoLaPaz`, la misma regla que Materiales). Los demás errores, con su texto de `errores.ts` (`MATERIAL_INACTIVO`, `OBRA_NO_ENCONTRADA`, genéricos).
 
