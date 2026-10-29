@@ -125,7 +125,7 @@ describe('pestañas según el rol (criterio 5) y barra superior (criterio 11)', 
     expect(screen.getAllByText('Mis obras')).toHaveLength(1);
   });
 
-  it('cada pestaña muestra por ahora su estado vacío', async () => {
+  it('sin obras asignadas, cada pestaña muestra su estado vacío', async () => {
     await entrarCon(['almacenero']);
     await fireEvent.press(await screen.findByText('Stock'));
     expect(screen).toHavePathname('/stock');
@@ -198,7 +198,7 @@ describe('foto de avance (005)', () => {
   it('el almacenero no tiene «Foto de avance» ni llega a la pantalla', async () => {
     await guardarTokens(sesionDe(['almacenero']));
     await renderRouter('src/app', { initialUrl: '/obras/o1/foto' });
-    await screen.findByText('Stock');
+    await screen.findAllByText('Stock');
     expect(screen).not.toHavePathname('/obras/o1/foto');
     expect(screen.queryByText('Foto de avance')).toBeNull();
   });
@@ -245,6 +245,57 @@ describe('foto de avance (005)', () => {
     ).toBeTruthy();
     expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
   });
+});
+
+describe('obras del almacenero (004, criterio 1)', () => {
+  beforeEach(() => {
+    obras['GET /obras'] = () => jsonRespuesta(200, [OBRA]);
+    obras['GET /obras/o1'] = () => jsonRespuesta(200, DETALLE);
+  });
+
+  it('«Mis obras» tiene en cada obra Ingreso, Salida y Stock, y no Foto de avance', async () => {
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    expect(screen.getByLabelText('Ingreso: Edificio Las Palmas')).toBeTruthy();
+    expect(screen.getByLabelText('Salida: Edificio Las Palmas')).toBeTruthy();
+    expect(screen.getByLabelText('Stock: Edificio Las Palmas')).toBeTruthy();
+    expect(screen.queryByLabelText('Foto de avance: Edificio Las Palmas')).toBeNull();
+
+    await fireEvent.press(screen.getByLabelText('Salida: Edificio Las Palmas'));
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    expect(screen).toHavePathname('/obras/o1/salida');
+  });
+
+  it('con los dos roles, cada obra tiene los cuatro botones', async () => {
+    await entrarCon(['maestro', 'almacenero']);
+    expect(await screen.findByLabelText('Foto de avance: Edificio Las Palmas')).toBeTruthy();
+    expect(screen.getByLabelText('Ingreso: Edificio Las Palmas')).toBeTruthy();
+    expect(screen.getByLabelText('Stock: Edificio Las Palmas')).toBeTruthy();
+  });
+
+  it.each([
+    ['Ingreso', '/obras/o1/ingreso'],
+    ['Salida', '/obras/o1/salida'],
+    ['Stock', '/obras/o1/stock'],
+  ])('la pestaña %s pide elegir la obra y lleva a su pantalla', async (pestana, ruta) => {
+    await entrarCon(['almacenero']);
+    await screen.findByLabelText('Ingreso: Edificio Las Palmas');
+    // El último es la pestaña (la barra va después del contenido); los otros, botones de las obras.
+    await fireEvent.press(screen.getAllByText(pestana).at(-1)!);
+    expect(await screen.findByText('Elige la obra')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Edificio Las Palmas'));
+    expect(screen).toHavePathname(ruta);
+  });
+
+  it.each(['/obras/o1/ingreso', '/obras/o1/salida', '/obras/o1/stock'])(
+    'un maestro no llega a %s (criterio 10)',
+    async (ruta) => {
+      await guardarTokens(sesionDe(['maestro']));
+      await renderRouter('src/app', { initialUrl: ruta });
+      await screen.findAllByText('Foto de avance');
+      expect(screen).not.toHavePathname(ruta);
+    },
+  );
 });
 
 describe('enviar la foto de avance (005)', () => {

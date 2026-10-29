@@ -58,11 +58,57 @@ export function nombreRoles(roles: readonly string[]): string {
 
 /**
  * Pantallas de una obra (`src/app/(app)/obras/[id]/…`): se apilan sobre las pestañas (se llega
- * desde «Mis obras» o desde la pestaña de su rol) y solo existen para su rol.
+ * desde «Mis obras» o desde la pestaña de su rol) y solo existen para su rol. `accion` es el botón
+ * de cada obra en «Mis obras».
  */
 export const PANTALLAS_OBRA = [
-  { ruta: 'obras/[id]/foto', titulo: 'Foto de avance', roles: ['maestro'] },
-] as const satisfies readonly { ruta: string; titulo: string; roles: readonly RolApp[] }[];
+  {
+    ruta: 'obras/[id]/foto',
+    titulo: 'Foto de avance',
+    accion: 'Foto de avance',
+    icono: 'camera-outline',
+    roles: ['maestro'],
+  },
+  {
+    ruta: 'obras/[id]/ingreso',
+    titulo: 'Ingreso de material',
+    accion: 'Ingreso',
+    icono: 'tray-arrow-down',
+    roles: ['almacenero'],
+  },
+  {
+    ruta: 'obras/[id]/salida',
+    titulo: 'Salida de material',
+    accion: 'Salida',
+    icono: 'tray-arrow-up',
+    roles: ['almacenero'],
+  },
+  {
+    ruta: 'obras/[id]/stock',
+    titulo: 'Stock de la obra',
+    accion: 'Stock',
+    icono: 'package-variant-closed',
+    roles: ['almacenero'],
+  },
+] as const satisfies readonly {
+  ruta: string;
+  titulo: string;
+  accion: string;
+  icono: string;
+  roles: readonly RolApp[];
+}[];
+
+export type PantallaObra = (typeof PANTALLAS_OBRA)[number];
+
+/** Pantallas de obra del usuario, en el orden de las pestañas (botones de «Mis obras»). */
+export function pantallasObraPorRol(roles: readonly string[]): PantallaObra[] {
+  return PANTALLAS_OBRA.filter((pantalla) => tieneAlgunRol(roles, pantalla.roles));
+}
+
+/** Dirección de una pantalla de obra: `obras/[id]/ingreso` → `/obras/o1/ingreso`. */
+export function rutaDeObra(pantalla: PantallaObra['ruta'], obraId: string): string {
+  return `/${pantalla.replace('[id]', encodeURIComponent(obraId))}`;
+}
 
 /** El usuario tiene alguno de los roles. */
 export function tieneAlgunRol(roles: readonly string[], permitidos: readonly RolApp[]): boolean {

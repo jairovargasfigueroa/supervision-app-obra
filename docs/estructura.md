@@ -47,7 +47,8 @@ src/
   formularios/     movimiento.esquema.ts, foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
                    foto.envio.ts (envío con reintento y qué hacer tras cada fallo), useFotoAvance.ts (estado de la pantalla)
   componentes/     BarraSuperior.tsx, PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
-                   ObrasAsignadas.tsx (lista de GET /obras), SelectorMaterial.tsx, SelectorPartida.tsx
+                   ObrasAsignadas.tsx (lista de GET /obras), ConObra.tsx (carga GET /obras/{id} para una
+                   pantalla de obra), SelectorMaterial.tsx, SelectorPartida.tsx
   sync/            (capa 1) cola.ts, base-local.ts
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
@@ -63,7 +64,7 @@ src/
 - Cerrar sesión (barra superior y «No tienes acceso»): borra los tokens de `expo-secure-store` y hace `POST` al `end_session_endpoint` del realm con `client_id` y `refresh_token` (cierre por canal trasero, `204`). Así termina la sesión SSO de Keycloak y la próxima vez se pide la contraseña. Sin conexión, los tokens igual se borran del celular.
 - Al abrir la app sin sesión, el inicio de sesión de Keycloak se abre solo una vez (criterio 1); después de cerrar sesión o de una sesión vencida se espera a que el usuario pulse «Iniciar sesión».
 - Roles (`roles.ts`): en la app solo cuentan `maestro` y `almacenero` del token (`realm_access.roles`, `azp = app-obra`); los demás se ignoran. Pestañas: `maestro` → Mis obras, Foto de avance; `almacenero` → Mis obras, Ingreso, Salida, Stock; con los dos, la unión sin repetir Mis obras. La barra superior muestra el `name` del token y «Maestro de obra», «Almacenero» o los dos.
-- Las pestañas Ingreso, Salida y Stock muestran por ahora el estado vacío («Aún no hay obras asignadas.»). Las pantallas reales son `obras/[id]/…` (004 y 005): cada una decide ahí cómo se elige la obra desde su pestaña.
+- Las pestañas Foto de avance, Ingreso, Salida y Stock listan las obras asignadas («Elige la obra») y llevan a la pantalla de la obra (`obras/[id]/…`); sin obras, el estado vacío («Aún no hay obras asignadas.»).
 - Las pantallas de una obra (`obras/[id]/…`) no van dentro de las pestañas sino en el Stack de `(app)/_layout.tsx`, encima de `(pestanas)`: en Expo Router 58 una pestaña oculta (`href: null`) ya no se puede abrir (redirige a la primera pestaña). Se protegen con `Stack.Protected` según `PANTALLAS_OBRA` de `roles.ts`, y `unstable_settings.initialRouteName = '(pestanas)'` deja las pestañas debajo si se abren desde un enlace. La barra superior la pone ese Stack, con «Volver» cuando hay pantalla anterior.
 - `src/app/_layout.tsx` usa `Stack.Protected`: sin sesión solo existe `(auth)/iniciar-sesion`; con sesión y rol de la app, `(app)`; con sesión sin rol de la app, `(auth)/sin-acceso`. `(app)/(pestanas)/_layout.tsx` usa `Tabs.Protected` para que un rol no llegue a las pestañas de otro. Al terminar la sesión se vacía la caché de TanStack Query (`queryClient.clear()`), para que no quede nada del usuario anterior.
 
@@ -77,6 +78,11 @@ src/
 - «Enviar» (`foto.envio.ts`, con `useMutation` sin reintentos automáticos): `POST /obras/{obraId}/fotos/url-subida` con el `fotoId` → lee el archivo comprimido (`file://`) y lo sube con `PUT` a la URL firmada (`Content-Type: image/jpeg`, sin token, 60 s como máximo) → `POST /obras/{obraId}/fotos` con `{ id: fotoId, partidaId, claveArchivo, tomadaEn }`. `201` y `200` (ya existía, criterio 4) son éxito: «Foto enviada.» y se quita la foto (la siguiente es un registro nuevo); la partida queda elegida.
 - Reintento (criterio 5): lo hecho queda en memoria (`EnvioFoto`: `fotoId`, archivo comprimido, última URL y si ya se subió) hasta que se registra. «Reintentar» sigue desde el paso que falló, con el mismo `fotoId` y el mismo archivo, sin volver a tomar ni comprimir la foto: si ya se subió, solo registra; si la URL vence en menos de 30 s, o S3 rechaza el `PUT` con `403` (URL vencida), pide otra con el mismo `fotoId`.
 - Tras un fallo se muestra «No se pudo enviar.» con el texto de `docs/mensajes.md`, y `decidirTrasFallo` (función pura) elige qué ofrecer: sin señal, tiempo agotado, `429`, `5xx` (también `503 SERVICIO_NO_DISPONIBLE` mientras no exista el bucket) o un rechazo de S3 → «Reintentar»; `422 PARTIDA_NO_ES_DE_LA_OBRA` → «Actualizar datos» y elegir otra partida (mismo `fotoId`); `422 CLAVE_ARCHIVO_INVALIDA`, `413`, `400` o la foto perdida → se descarta la foto para tomar otra; `403` y `404 OBRA_NO_ENCONTRADA` → sin reintento; `401` o sesión terminada → «Iniciar sesión».
+
+## Movimientos de material (004)
+
+- Se llega a `obras/[id]/ingreso`, `obras/[id]/salida` y `obras/[id]/stock` (solo `almacenero`, `Stack.Protected` con `PANTALLAS_OBRA`) de dos formas (criterio 1): desde «Mis obras», con los botones «Ingreso», «Salida» y «Stock» de cada obra (`pantallasObraPorRol`: con los dos roles salen también «Foto de avance»; los botones bajan de renglón a 360 px), o desde la pestaña del mismo nombre, que pide elegir la obra.
+- Cada pantalla carga la obra con `ConObra` (`GET /obras/{id}`: nombre y partidas) y lleva `key={id}`.
 
 ## Reglas
 
