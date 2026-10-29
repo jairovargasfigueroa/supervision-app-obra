@@ -102,7 +102,7 @@ src/
 
 ## Pruebas
 
-`jest-expo` + Testing Library: cliente REST (reintentos), esquemas Zod, componentes principales. `npm test`, `npx tsc --noEmit` y `npx expo-doctor` antes de cada commit.
+`jest-expo` + Testing Library: cliente REST (reintentos; en `materiales.test.ts`, el movimiento repetido a 1 s, 2 s y 4 s con el mismo cuerpo e `id` ante red, tiempo agotado o `503`, `200` como éxito y los `4xx`/`500` sin reintento), esquemas Zod, componentes principales. `npm test`, `npx tsc --noEmit` y `npx expo-doctor` antes de cada commit.
 
 - Las pruebas van junto al archivo que prueban (`formato.test.ts`, `estados.test.tsx`).
 - Las rutas (`src/app/`) se prueban desde fuera de esa carpeta, en `src/rutas.test.tsx`, con `renderRouter('src/app')` de `expo-router/testing-library`: todo archivo dentro de `src/app/` es una pantalla, así que ahí no van pruebas.

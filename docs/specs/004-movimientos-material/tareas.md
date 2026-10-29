@@ -8,4 +8,4 @@ Marca cada tarea al terminarla (con sus pruebas y su commit).
 - [x] Pantalla de obras asignadas (almacenero)
 - [x] Pantallas Ingreso y Salida (UUID por formulario reutilizado en reintentos, avisos de stock superado y periodo cerrado)
 - [x] Pantalla Stock con estados coloreados
-- [ ] Pruebas del cliente REST
+- [x] Pruebas del cliente REST
