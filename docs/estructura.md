@@ -41,7 +41,8 @@ src/
                    tokens.ts (secure-store), token.ts (lee el JWT), renovacion.ts (cuándo renovar),
                    roles.ts (roles efectivos, pestañas y pantallas de obra por rol, nombre del rol)
   api/             red.ts (única llamada a fetch), cliente.ts (token, tiempo máximo, X-Request-Id, errores por
-                   codigo; QueryClient con reintentos 1-2-4 s), errores.ts (ErrorApi y textos de docs/mensajes.md),
+                   codigo, URL de cada servicio, validación Zod de la respuesta; QueryClient con reintentos
+                   1-2-4 s de las consultas y conReintentos para repetir un registro con su id), errores.ts (ErrorApi y textos de docs/mensajes.md),
                    obras.ts, materiales.ts (funciones + queryOptions), subida.ts (lee la foto y hace el PUT a S3)
   formularios/     movimiento.esquema.ts, foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
                    foto.envio.ts (envío con reintento y qué hacer tras cada fallo), useFotoAvance.ts (estado de la pantalla)

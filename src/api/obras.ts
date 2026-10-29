@@ -3,9 +3,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { z } from 'zod';
 
-import { configuracion } from '../nucleo/configuracion';
-import { pedir, type ObtenerToken } from './cliente';
-import { ErrorApi } from './errores';
+import { pedir, urlServicio, validar, type ObtenerToken } from './cliente';
 
 const esquemaObra = z.looseObject({
   id: z.string(),
@@ -48,15 +46,7 @@ export type RegistroFoto = {
   tomadaEn: string;
 };
 
-function validar<T>(esquema: z.ZodType<T>, datos: unknown): T {
-  const resultado = esquema.safeParse(datos);
-  if (!resultado.success) {
-    throw new ErrorApi({ tipo: 'respuesta-invalida' });
-  }
-  return resultado.data;
-}
-
-const url = (ruta: string) => `${configuracion().obrasUrl.replace(/\/+$/, '')}${ruta}`;
+const url = (ruta: string) => urlServicio('obras', ruta);
 const segmento = encodeURIComponent;
 
 /** `GET /obras`: Obras devuelve solo las asignadas al usuario. */
