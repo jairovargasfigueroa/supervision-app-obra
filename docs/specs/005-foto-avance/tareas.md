@@ -6,4 +6,4 @@ Marca cada tarea al terminarla (con sus pruebas y su commit).
 
 - [x] Instalar `expo-image-picker` y `expo-image-manipulator`
 - [x] Pantalla Foto de avance: partida, cámara o galería, compresión 1600 px / 0,8, vista previa
-- [ ] Subida con URL firmada, registro y reintento conservando el `fotoId`
+- [x] Subida con URL firmada, registro y reintento conservando el `fotoId`

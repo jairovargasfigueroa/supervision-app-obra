@@ -42,9 +42,9 @@ src/
                    roles.ts (roles efectivos, pestañas y pantallas de obra por rol, nombre del rol)
   api/             red.ts (única llamada a fetch), cliente.ts (token, tiempo máximo, X-Request-Id, errores por
                    codigo; QueryClient con reintentos 1-2-4 s), errores.ts (ErrorApi y textos de docs/mensajes.md),
-                   obras.ts, materiales.ts (funciones + queryOptions)
+                   obras.ts, materiales.ts (funciones + queryOptions), subida.ts (lee la foto y hace el PUT a S3)
   formularios/     movimiento.esquema.ts, foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
-                   useFotoAvance.ts (estado de la pantalla Foto de avance)
+                   foto.envio.ts (envío con reintento y qué hacer tras cada fallo), useFotoAvance.ts (estado de la pantalla)
   componentes/     BarraSuperior.tsx, PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
                    ObrasAsignadas.tsx (lista de GET /obras), SelectorMaterial.tsx, SelectorPartida.tsx
   sync/            (capa 1) cola.ts, base-local.ts
@@ -73,6 +73,9 @@ src/
 - `tomadaEn`: con la cámara, el momento en que vuelve la foto; de la galería, `DateTimeOriginal` del EXIF (con `OffsetTimeOriginal` si lo trae; si no, en la hora del celular), o el momento actual si no hay fecha válida o es futura.
 - No usa TanStack Form: no hay campos de texto (solo partida y foto). `foto.esquema.ts` (Zod) dice qué falta para enviar y la pantalla lo muestra bajo «Enviar».
 - El `fotoId` (UUID de `expo-crypto`) se crea al tener la foto; una foto nueva es un registro nuevo. La pantalla lleva `key={id}` para empezar de cero en cada obra.
+- «Enviar» (`foto.envio.ts`, con `useMutation` sin reintentos automáticos): `POST /obras/{obraId}/fotos/url-subida` con el `fotoId` → lee el archivo comprimido (`file://`) y lo sube con `PUT` a la URL firmada (`Content-Type: image/jpeg`, sin token, 60 s como máximo) → `POST /obras/{obraId}/fotos` con `{ id: fotoId, partidaId, claveArchivo, tomadaEn }`. `201` y `200` (ya existía, criterio 4) son éxito: «Foto enviada.» y se quita la foto (la siguiente es un registro nuevo); la partida queda elegida.
+- Reintento (criterio 5): lo hecho queda en memoria (`EnvioFoto`: `fotoId`, archivo comprimido, última URL y si ya se subió) hasta que se registra. «Reintentar» sigue desde el paso que falló, con el mismo `fotoId` y el mismo archivo, sin volver a tomar ni comprimir la foto: si ya se subió, solo registra; si la URL vence en menos de 30 s, o S3 rechaza el `PUT` con `403` (URL vencida), pide otra con el mismo `fotoId`.
+- Tras un fallo se muestra «No se pudo enviar.» con el texto de `docs/mensajes.md`, y `decidirTrasFallo` (función pura) elige qué ofrecer: sin señal, tiempo agotado, `429`, `5xx` (también `503 SERVICIO_NO_DISPONIBLE` mientras no exista el bucket) o un rechazo de S3 → «Reintentar»; `422 PARTIDA_NO_ES_DE_LA_OBRA` → «Actualizar datos» y elegir otra partida (mismo `fotoId`); `422 CLAVE_ARCHIVO_INVALIDA`, `413`, `400` o la foto perdida → se descarta la foto para tomar otra; `403` y `404 OBRA_NO_ENCONTRADA` → sin reintento; `401` o sesión terminada → «Iniciar sesión».
 
 ## Reglas
 

@@ -13,7 +13,11 @@ export type FalloApi =
   /** La sesión terminó (no hay token); la app vuelve sola al inicio de sesión. */
   | { tipo: 'sin-sesion' }
   /** El servicio respondió algo que no es lo del contrato. */
-  | { tipo: 'respuesta-invalida' };
+  | { tipo: 'respuesta-invalida' }
+  /** El almacenamiento (S3) rechazó la subida con la URL firmada. */
+  | { tipo: 'subida'; estado: number }
+  /** No se pudo leer el archivo de la foto en el celular. */
+  | { tipo: 'archivo' };
 
 export class ErrorApi extends Error {
   constructor(readonly fallo: FalloApi) {
@@ -63,6 +67,8 @@ const GENERICO_POR_ESTADO: Record<number, string> = {
 
 export const MENSAJE_SIN_CONEXION =
   'No hay conexión con el servidor. Revisa tu conexión a internet e intenta de nuevo.';
+/** `SUBIDA_INVALIDA` en docs/mensajes.md: la foto no está lista para enviarse. */
+export const MENSAJE_FOTO_NO_PREPARADA = 'La foto no se pudo preparar para el envío.';
 export const MENSAJE_TIEMPO_CLIENTE =
   'La respuesta está tardando demasiado. Revisa tu conexión e intenta de nuevo.';
 
@@ -90,7 +96,10 @@ export function mensajeDeFallo(fallo: FalloApi): string {
     case 'sin-sesion':
       return MENSAJES.NO_AUTENTICADO;
     case 'respuesta-invalida':
+    case 'subida':
       return MENSAJES.ERROR_INTERNO;
+    case 'archivo':
+      return MENSAJE_FOTO_NO_PREPARADA;
   }
 }
 
@@ -108,7 +117,7 @@ export function mensajeDeError(error: unknown): string {
  * `4xx` (datos, permiso, regla del negocio) daría lo mismo otra vez.
  */
 export function esReintentable(fallo: FalloApi): boolean {
-  if (fallo.tipo === 'red' || fallo.tipo === 'tiempo') {
+  if (fallo.tipo === 'red' || fallo.tipo === 'tiempo' || fallo.tipo === 'subida') {
     return true;
   }
   return fallo.tipo === 'http' && (fallo.estado === 429 || fallo.estado >= 500);
