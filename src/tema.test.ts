@@ -12,7 +12,7 @@ describe('tema', () => {
     expect(tema.colors.onSurface).toBe('#14232A');
     expect(tema.colors.exito).toBe('#1B7343');
     expect(tema.colors.atencion).toBe('#9A4A00');
-    expect(tema.roundness).toBe(2);
+    expect(tema.roundness).toBe(1.2);
     expect(tema.dark).toBe(false);
   });
 
