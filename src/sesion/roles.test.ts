@@ -1,4 +1,10 @@
-import { nombreRoles, pestanasPorRol, rolesEfectivos, tieneAccesoApp } from './roles';
+import {
+  nombreRoles,
+  pestanasPorRol,
+  rolesEfectivos,
+  tieneAccesoApp,
+  tieneAlgunRol,
+} from './roles';
 
 const titulos = (roles: string[]) => pestanasPorRol(roles).map((p) => p.titulo);
 
@@ -46,5 +52,12 @@ describe('roles de la app', () => {
     expect(nombreRoles(['almacenero', 'cliente'])).toBe('Almacenero');
     expect(nombreRoles(['almacenero', 'maestro'])).toBe('Maestro de obra · Almacenero');
     expect(nombreRoles(['residente'])).toBe('');
+  });
+});
+
+describe('tieneAlgunRol', () => {
+  it('cuenta solo los roles de la app', () => {
+    expect(tieneAlgunRol(['maestro'], ['maestro'])).toBe(true);
+    expect(tieneAlgunRol(['almacenero', 'residente'], ['maestro'])).toBe(false);
   });
 });

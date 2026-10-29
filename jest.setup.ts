@@ -14,8 +14,39 @@ jest.mock('expo-font', () => {
 // Almacenamiento cifrado simulado en memoria (se vacía antes de cada prueba).
 jest.mock('expo-secure-store', () => jest.requireActual('./src/pruebas/secure-store-simulado'));
 
+// En Jest expo-constants no trae el app.json: la configuración se lee de app.json directamente.
+jest.mock('./src/nucleo/configuracion', () => {
+  const real = jest.requireActual<typeof import('./src/nucleo/configuracion')>(
+    './src/nucleo/configuracion',
+  );
+  const { expo } = jest.requireActual<typeof import('./app.json')>('./app.json');
+  return { ...real, configuracion: () => real.leerConfiguracion(expo.extra) };
+});
+
+// El módulo nativo de expo-crypto no existe en Jest: los UUID salen del crypto de Node.
+jest.mock('expo-crypto', () => ({
+  ...jest.requireActual('expo-crypto'),
+  randomUUID: () => globalThis.crypto.randomUUID(),
+}));
+
+// Sin red real: cada prueba da sus respuestas (src/pruebas/fetch-simulado.ts).
+jest.mock('./src/api/red', () => ({
+  enviar: jest.fn(() => Promise.reject(new TypeError('Network request failed'))),
+}));
+
+// Cámara, galería y compresión simuladas (src/pruebas/imagen-simulada.ts).
+jest.mock('expo-image-manipulator', () =>
+  jest.requireActual('./src/pruebas/imagen-simulada').moduloManipulador,
+);
+jest.mock('expo-image-picker', () =>
+  jest.requireActual('./src/pruebas/imagen-simulada').moduloSelector,
+);
+
 beforeEach(() => {
   jest.requireMock<typeof import('./src/pruebas/secure-store-simulado')>(
     'expo-secure-store',
   ).reiniciarSecureStore();
+  jest.requireActual<typeof import('./src/pruebas/imagen-simulada')>(
+    './src/pruebas/imagen-simulada',
+  ).simularManipulador({ ancho: 4000, alto: 3000 });
 });

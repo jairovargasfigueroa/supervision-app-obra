@@ -1,9 +1,11 @@
+import { QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { useFonts } from 'expo-font';
 import { DefaultTheme, SplashScreen, Stack, ThemeProvider, type Theme } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { PaperProvider } from 'react-native-paper';
 
+import { crearClienteConsultas } from '../api/cliente';
 import { tieneAccesoApp } from '../sesion/roles';
 import { SesionProvider, useSesion } from '../sesion/sesion';
 import { colores, fuentesInter, tema, temaSistema } from '../tema';
@@ -32,12 +34,17 @@ const temaNavegacion: Theme = {
  */
 function Navegacion() {
   const { sesion } = useSesion();
+  const consultas = useQueryClient();
 
   useEffect(() => {
     if (sesion.estado !== 'cargando') {
       SplashScreen.hide();
     }
-  }, [sesion.estado]);
+    // Al terminar la sesión no queda nada del usuario anterior (obras, partidas) en memoria.
+    if (sesion.estado === 'sin-sesion') {
+      consultas.clear();
+    }
+  }, [sesion.estado, consultas]);
 
   if (sesion.estado === 'cargando') {
     return null;
@@ -61,6 +68,7 @@ function Navegacion() {
 
 export default function RaizLayout() {
   const [interCargada, errorFuente] = useFonts(fuentesInter);
+  const [consultas] = useState(crearClienteConsultas);
 
   // Mientras carga Inter no se muestra nada; si falla, se sigue con la fuente del sistema.
   if (!interCargada && !errorFuente) {
@@ -71,9 +79,11 @@ export default function RaizLayout() {
     <PaperProvider theme={interCargada ? tema : temaSistema}>
       <ThemeProvider value={temaNavegacion}>
         <StatusBar style="light" />
-        <SesionProvider>
-          <Navegacion />
-        </SesionProvider>
+        <QueryClientProvider client={consultas}>
+          <SesionProvider>
+            <Navegacion />
+          </SesionProvider>
+        </QueryClientProvider>
       </ThemeProvider>
     </PaperProvider>
   );
