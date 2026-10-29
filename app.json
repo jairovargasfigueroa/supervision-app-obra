@@ -3,6 +3,7 @@
     "name": "app-obra",
     "slug": "app-obra",
     "version": "0.1.0",
+    "scheme": "appobra",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
@@ -23,7 +24,17 @@
     },
     "plugins": [
       "expo-font",
-      "expo-asset"
-    ]
+      "expo-asset",
+      "expo-router",
+      "expo-secure-store",
+      "expo-web-browser"
+    ],
+    "extra": {
+      "keycloakUrl": "http://localhost:8080",
+      "realm": "supervision",
+      "clientId": "app-obra",
+      "obrasUrl": "http://localhost:8081",
+      "materialesUrl": "http://localhost:8082"
+    }
   }
 }

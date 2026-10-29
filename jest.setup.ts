@@ -10,3 +10,12 @@ jest.mock('expo-font', () => {
     useFonts: () => [true, null],
   };
 });
+
+// Almacenamiento cifrado simulado en memoria (se vacía antes de cada prueba).
+jest.mock('expo-secure-store', () => jest.requireActual('./src/pruebas/secure-store-simulado'));
+
+beforeEach(() => {
+  jest.requireMock<typeof import('./src/pruebas/secure-store-simulado')>(
+    'expo-secure-store',
+  ).reiniciarSecureStore();
+});
