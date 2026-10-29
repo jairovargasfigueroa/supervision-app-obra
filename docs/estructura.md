@@ -26,26 +26,31 @@ src/
     index.tsx                        # entrada: redirige según la sesión
     (auth)/iniciar-sesion.tsx
     (auth)/sin-acceso.tsx            # sin maestro ni almacenero (criterio 3)
-    (app)/_layout.tsx                # pestañas según rol (Tabs.Protected) y barra con nombre y rol
-    (app)/obras/index.tsx            # pestaña Mis obras (maestro y almacenero)
-    (app)/foto.tsx                   # pestaña Foto de avance (maestro)
-    (app)/ingreso.tsx                # pestaña Ingreso (almacenero)
-    (app)/salida.tsx                 # pestaña Salida (almacenero)
-    (app)/stock.tsx                  # pestaña Stock (almacenero)
-    (app)/obras/[id]/foto.tsx        # maestro
+    (app)/_layout.tsx                # Stack con la barra superior (nombre, rol, «Volver»); pantallas de obra con Stack.Protected por rol
+    (app)/(pestanas)/_layout.tsx     # pestañas según rol (Tabs.Protected)
+    (app)/(pestanas)/obras/index.tsx # pestaña Mis obras (maestro y almacenero)
+    (app)/(pestanas)/foto.tsx        # pestaña Foto de avance (maestro): elige la obra
+    (app)/(pestanas)/ingreso.tsx     # pestaña Ingreso (almacenero)
+    (app)/(pestanas)/salida.tsx      # pestaña Salida (almacenero)
+    (app)/(pestanas)/stock.tsx       # pestaña Stock (almacenero)
+    (app)/obras/[id]/foto.tsx        # maestro (005)
     (app)/obras/[id]/ingreso.tsx     # almacenero
     (app)/obras/[id]/salida.tsx      # almacenero
     (app)/obras/[id]/stock.tsx       # almacenero
   sesion/          sesion.tsx (contexto: SesionProvider, useSesion), keycloak.ts (expo-auth-session),
                    tokens.ts (secure-store), token.ts (lee el JWT), renovacion.ts (cuándo renovar),
-                   roles.ts (roles efectivos, pestañas por rol, nombre del rol)
-  api/             cliente.ts (fetch con token, reintentos 1-2-4 s), obras.ts, materiales.ts (funciones + queryOptions)
-  formularios/     movimiento.esquema.ts, foto.esquema.ts (Zod)
+                   roles.ts (roles efectivos, pestañas y pantallas de obra por rol, nombre del rol)
+  api/             red.ts (única llamada a fetch), cliente.ts (token, tiempo máximo, X-Request-Id, errores por
+                   codigo; QueryClient con reintentos 1-2-4 s), errores.ts (ErrorApi y textos de docs/mensajes.md),
+                   obras.ts, materiales.ts (funciones + queryOptions)
+  formularios/     movimiento.esquema.ts, foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
+                   useFotoAvance.ts (estado de la pantalla Foto de avance)
   componentes/     BarraSuperior.tsx, PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
-                   SelectorMaterial.tsx, SelectorPartida.tsx
+                   ObrasAsignadas.tsx (lista de GET /obras), SelectorMaterial.tsx, SelectorPartida.tsx
   sync/            (capa 1) cola.ts, base-local.ts
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod)
-  pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts
+  pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
+                   imagen-simulada.ts (cámara, galería y compresión)
   tema.ts
 ```
 
@@ -57,8 +62,17 @@ src/
 - Cerrar sesión (barra superior y «No tienes acceso»): borra los tokens de `expo-secure-store` y hace `POST` al `end_session_endpoint` del realm con `client_id` y `refresh_token` (cierre por canal trasero, `204`). Así termina la sesión SSO de Keycloak y la próxima vez se pide la contraseña. Sin conexión, los tokens igual se borran del celular.
 - Al abrir la app sin sesión, el inicio de sesión de Keycloak se abre solo una vez (criterio 1); después de cerrar sesión o de una sesión vencida se espera a que el usuario pulse «Iniciar sesión».
 - Roles (`roles.ts`): en la app solo cuentan `maestro` y `almacenero` del token (`realm_access.roles`, `azp = app-obra`); los demás se ignoran. Pestañas: `maestro` → Mis obras, Foto de avance; `almacenero` → Mis obras, Ingreso, Salida, Stock; con los dos, la unión sin repetir Mis obras. La barra superior muestra el `name` del token y «Maestro de obra», «Almacenero» o los dos.
-- Las pestañas Foto de avance, Ingreso, Salida y Stock muestran por ahora el estado vacío («Aún no hay obras asignadas.»). Las pantallas reales son `obras/[id]/…` (004 y 005): cada una decide ahí cómo se elige la obra desde su pestaña.
-- `src/app/_layout.tsx` usa `Stack.Protected`: sin sesión solo existe `(auth)/iniciar-sesion`; con sesión y rol de la app, `(app)`; con sesión sin rol de la app, `(auth)/sin-acceso`. `(app)/_layout.tsx` usa `Tabs.Protected` para que un rol no llegue a las pestañas de otro.
+- Las pestañas Ingreso, Salida y Stock muestran por ahora el estado vacío («Aún no hay obras asignadas.»). Las pantallas reales son `obras/[id]/…` (004 y 005): cada una decide ahí cómo se elige la obra desde su pestaña.
+- Las pantallas de una obra (`obras/[id]/…`) no van dentro de las pestañas sino en el Stack de `(app)/_layout.tsx`, encima de `(pestanas)`: en Expo Router 58 una pestaña oculta (`href: null`) ya no se puede abrir (redirige a la primera pestaña). Se protegen con `Stack.Protected` según `PANTALLAS_OBRA` de `roles.ts`, y `unstable_settings.initialRouteName = '(pestanas)'` deja las pestañas debajo si se abren desde un enlace. La barra superior la pone ese Stack, con «Volver» cuando hay pantalla anterior.
+- `src/app/_layout.tsx` usa `Stack.Protected`: sin sesión solo existe `(auth)/iniciar-sesion`; con sesión y rol de la app, `(app)`; con sesión sin rol de la app, `(auth)/sin-acceso`. `(app)/(pestanas)/_layout.tsx` usa `Tabs.Protected` para que un rol no llegue a las pestañas de otro. Al terminar la sesión se vacía la caché de TanStack Query (`queryClient.clear()`), para que no quede nada del usuario anterior.
+
+## Foto de avance (005)
+
+- Se llega a `obras/[id]/foto` de dos formas (criterio 1): desde «Mis obras», con el botón «Foto de avance» de cada obra (solo `maestro`), o desde la pestaña «Foto de avance», que lista las mismas obras («Elige la obra») y lleva a la pantalla de la que se pulse. Las dos usan `ObrasAsignadas` (`GET /obras`, que Obras ya filtra por asignación).
+- La pantalla carga la obra con `GET /obras/{id}` (partidas en `SelectorPartida`), toma la foto con la cámara (pide el permiso) o la elige de la galería (`expo-image-picker`, `mediaTypes: ['images']`, `quality: 1` para comprimir una sola vez) y la reduce con `expo-image-manipulator` (`ImageManipulator.manipulate` → `resize` del lado más largo a 1600 px si lo pasa → `saveAsync({ compress: 0.8, format: JPEG })`). Las medidas se leen de la imagen cargada por el manipulador, que ya tiene aplicada la orientación.
+- `tomadaEn`: con la cámara, el momento en que vuelve la foto; de la galería, `DateTimeOriginal` del EXIF (con `OffsetTimeOriginal` si lo trae; si no, en la hora del celular), o el momento actual si no hay fecha válida o es futura.
+- No usa TanStack Form: no hay campos de texto (solo partida y foto). `foto.esquema.ts` (Zod) dice qué falta para enviar y la pantalla lo muestra bajo «Enviar».
+- El `fotoId` (UUID de `expo-crypto`) se crea al tener la foto; una foto nueva es un registro nuevo. La pantalla lleva `key={id}` para empezar de cero en cada obra.
 
 ## Reglas
 
@@ -74,5 +88,6 @@ src/
 - Las pruebas van junto al archivo que prueban (`formato.test.ts`, `estados.test.tsx`).
 - Las rutas (`src/app/`) se prueban desde fuera de esa carpeta, en `src/rutas.test.tsx`, con `renderRouter('src/app')` de `expo-router/testing-library`: todo archivo dentro de `src/app/` es una pantalla, así que ahí no van pruebas.
 - `testTimeout` de Jest en 60 s (`package.json`): la primera prueba que monta Expo Router tarda en cargar los módulos.
-- `jest.setup.ts` (en `setupFilesAfterEnv`) simula `expo-secure-store` en memoria (`src/pruebas/secure-store-simulado.ts`, se vacía antes de cada prueba) y `expo-font` (fuentes e íconos dados por cargados), porque en Jest no hay archivos de fuentes reales.
+- `jest.setup.ts` (en `setupFilesAfterEnv`) simula `expo-secure-store` en memoria (`src/pruebas/secure-store-simulado.ts`, se vacía antes de cada prueba) y `expo-font` (fuentes e íconos dados por cargados), porque en Jest no hay archivos de fuentes reales. También simula `expo-image-picker` y `expo-image-manipulator` (`src/pruebas/imagen-simulada.ts`), `randomUUID` de `expo-crypto` (con el `crypto` de Node), `configuracion()` (lee `app.json`, porque en Jest `expo-constants` no lo trae) y `src/api/red.ts`.
+- La red se simula en `src/api/red.ts` (`jest.mock`) y no en el `fetch` global, porque Expo vuelve a instalar su `fetch` (`expo/fetch`) al cargar sus módulos dentro de `renderRouter` y pisaría el simulado. Cada prueba le da sus respuestas con `simularFetch()` y `jsonRespuesta()` (`src/pruebas/fetch-simulado.ts`).
 - Compilación sin celular: `npx expo export --platform android`.

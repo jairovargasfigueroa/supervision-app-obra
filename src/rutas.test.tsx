@@ -1,5 +1,8 @@
 import { fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 
+import * as ImagePicker from 'expo-image-picker';
+
+import { jsonRespuesta, simularFetch } from './pruebas/fetch-simulado';
 import { tokenDeUsuario } from './pruebas/jwt';
 import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './sesion/keycloak';
 import { RenovacionRechazada } from './sesion/renovacion';
@@ -20,9 +23,35 @@ const sesionDe = (roles: string[], nombre = 'Juan Pérez') => ({
 
 const abrirApp = () => renderRouter('src/app', { initialUrl: '/' });
 
+/** Respuestas simuladas de Obras por «MÉTODO /ruta»; lo que no está responde 404. */
+type Manejador = (init: RequestInit) => Response | Promise<Response>;
+let obras: Record<string, Manejador>;
+let fetchMock: jest.Mock;
+
+const OBRA = { id: 'o1', nombre: 'Edificio Las Palmas', ubicacion: 'Av. Banzer 4to anillo', estado: 'EN_EJECUCION' };
+const DETALLE = {
+  ...OBRA,
+  partidas: [
+    { id: 'p1', codigo: 'P-01', nombre: 'Losa de hormigón armado', unidad: 'm2' },
+    { id: 'p2', codigo: 'P-02', nombre: 'Muro de ladrillo', unidad: 'm2' },
+  ],
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   iniciarMock.mockResolvedValue(null);
+  jest.spyOn(console, 'warn').mockImplementation(() => {});
+  obras = { 'GET /obras': () => jsonRespuesta(200, []) };
+  fetchMock = simularFetch();
+  fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
+    const clave = `${init.method ?? 'GET'} ${url.replace('http://localhost:8081', '')}`;
+    const manejador = obras[clave];
+    return manejador ? manejador(init) : jsonRespuesta(404, { codigo: 'RUTA_NO_ENCONTRADA' });
+  });
+});
+
+afterEach(() => {
+  jest.restoreAllMocks();
 });
 
 describe('inicio de sesión', () => {
@@ -139,5 +168,80 @@ describe('cerrar sesión desde la barra superior', () => {
     await expect(leerTokens()).resolves.toBeNull();
     expect(jest.mocked(cerrarSesionKeycloak)).toHaveBeenCalledWith('r1');
     expect(iniciarMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('foto de avance (005)', () => {
+  beforeEach(() => {
+    obras['GET /obras'] = () => jsonRespuesta(200, [OBRA]);
+    obras['GET /obras/o1'] = () => jsonRespuesta(200, DETALLE);
+  });
+
+  it('en «Mis obras» el maestro elige una obra y pulsa «Foto de avance» (criterio 1)', async () => {
+    await entrarCon(['maestro']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Foto de avance: Edificio Las Palmas'));
+    expect(await screen.findByText('P-01 · Losa de hormigón armado')).toBeTruthy();
+    expect(screen).toHavePathname('/obras/o1/foto');
+  });
+
+  it('la pestaña Foto de avance lista sus obras y lleva a la pantalla de la obra', async () => {
+    await entrarCon(['maestro']);
+    await fireEvent.press(await screen.findByText('Foto de avance'));
+    expect(await screen.findByText('Elige la obra')).toBeTruthy();
+    await fireEvent.press(screen.getByLabelText('Edificio Las Palmas'));
+    expect(await screen.findByText('P-02 · Muro de ladrillo')).toBeTruthy();
+    expect(screen).toHavePathname('/obras/o1/foto');
+  });
+
+  it('el almacenero no tiene «Foto de avance» ni llega a la pantalla', async () => {
+    await guardarTokens(sesionDe(['almacenero']));
+    await renderRouter('src/app', { initialUrl: '/obras/o1/foto' });
+    await screen.findByText('Stock');
+    expect(screen).not.toHavePathname('/obras/o1/foto');
+    expect(screen.queryByText('Foto de avance')).toBeNull();
+  });
+
+  it('si Obras no responde, «Mis obras» muestra el error con «Reintentar»', async () => {
+    obras['GET /obras'] = () => jsonRespuesta(404, { codigo: 'RUTA_NO_ENCONTRADA' });
+    await entrarCon(['maestro']);
+    expect(
+      await screen.findByText('No encontramos lo que buscas. Puede que ya no exista o que no tengas acceso.'),
+    ).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Reintentar/ })).toBeTruthy();
+  });
+
+  it('elige la partida, toma la foto comprimida y la ve antes de enviar (criterios 1 y 2)', async () => {
+    jest.mocked(ImagePicker.launchCameraAsync).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///original.jpg', width: 4000, height: 3000 }],
+    });
+    await guardarTokens(sesionDe(['maestro']));
+    await renderRouter('src/app', { initialUrl: '/obras/o1/foto' });
+    await screen.findByText('P-01 · Losa de hormigón armado');
+    const enviar = () => screen.getByRole('button', { name: /Enviar/ });
+    expect(enviar()).toBeDisabled();
+
+    await fireEvent.press(screen.getByRole('button', { name: /Tomar foto/ }));
+    const vista = await screen.findByTestId('vista-previa');
+    expect(vista.props.source).toEqual({ uri: 'file:///comprimida.jpg' });
+    expect(screen.getByText('Elige la partida.')).toBeTruthy();
+    expect(enviar()).toBeDisabled();
+
+    await fireEvent.press(screen.getByText('P-01 · Losa de hormigón armado'));
+    expect(screen.queryByText('Elige la partida.')).toBeNull();
+  });
+
+  it('sin permiso de cámara lo dice y no abre la cámara', async () => {
+    jest
+      .mocked(ImagePicker.requestCameraPermissionsAsync)
+      .mockResolvedValueOnce({ granted: false } as ImagePicker.CameraPermissionResponse);
+    await guardarTokens(sesionDe(['maestro']));
+    await renderRouter('src/app', { initialUrl: '/obras/o1/foto' });
+    await fireEvent.press(await screen.findByRole('button', { name: /Tomar foto/ }));
+    expect(
+      await screen.findByText('Para tomar la foto, permite el uso de la cámara en los ajustes del celular.'),
+    ).toBeTruthy();
+    expect(ImagePicker.launchCameraAsync).not.toHaveBeenCalled();
   });
 });

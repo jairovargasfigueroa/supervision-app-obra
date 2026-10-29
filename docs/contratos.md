@@ -7,7 +7,7 @@
 | Desde | Qué | Etapa |
 |---|---|---|
 | Keycloak | Inicio de sesión OIDC (realm `supervision`, cliente público `app-obra` con PKCE `S256`, mediante `expo-auth-session`): descubrimiento (`/.well-known/openid-configuration`), `authorization_endpoint` (redirect `appobra://iniciar-sesion` o, en Expo Go, `exp://…/--/iniciar-sesion`), `token_endpoint` (código y refresh token) y `end_session_endpoint` (`POST` con `client_id` y `refresh_token` al cerrar sesión) | Base |
-| Obras (REST) | Mis obras y partidas; registrar foto de avance | Base |
+| Obras (REST) | `GET /obras` (obras asignadas: «Mis obras» y pestaña Foto de avance) · `GET /obras/{id}` (partidas) · `POST /obras/{obraId}/fotos/url-subida` y `POST /obras/{obraId}/fotos` (foto de avance, 005). Con `Authorization: Bearer` del token de la sesión y un `X-Request-Id` por pedido; errores en Problem Details con `codigo` (textos de `docs/mensajes.md`, en `src/api/errores.ts`) | Base |
 | Materiales (REST) | Catálogo, stock de la obra; registrar ingreso y salida | Base |
 | Sincronización (REST) | Enviar la cola de registros; reemplaza las llamadas directas | Capa 1 |
 

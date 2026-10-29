@@ -18,7 +18,7 @@ export function tieneAccesoApp(roles: readonly string[]): boolean {
 }
 
 export type Pestana = {
-  /** Nombre de la ruta en `src/app/(app)/`. */
+  /** Nombre de la ruta en `src/app/(app)/(pestanas)/`. */
   ruta: 'obras/index' | 'foto' | 'ingreso' | 'salida' | 'stock';
   titulo: string;
   /** Ícono de MaterialCommunityIcons. */
@@ -54,4 +54,17 @@ export function nombreRoles(roles: readonly string[]): string {
   return rolesEfectivos(roles)
     .map((rol) => NOMBRE_ROL[rol])
     .join(' · ');
+}
+
+/**
+ * Pantallas de una obra (`src/app/(app)/obras/[id]/…`): se apilan sobre las pestañas (se llega
+ * desde «Mis obras» o desde la pestaña de su rol) y solo existen para su rol.
+ */
+export const PANTALLAS_OBRA = [
+  { ruta: 'obras/[id]/foto', titulo: 'Foto de avance', roles: ['maestro'] },
+] as const satisfies readonly { ruta: string; titulo: string; roles: readonly RolApp[] }[];
+
+/** El usuario tiene alguno de los roles. */
+export function tieneAlgunRol(roles: readonly string[], permitidos: readonly RolApp[]): boolean {
+  return rolesEfectivos(roles).some((rol) => permitidos.includes(rol));
 }

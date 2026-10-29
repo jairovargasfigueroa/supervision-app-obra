@@ -1,50 +1,39 @@
-import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { Tabs } from 'expo-router';
-import type { ColorValue } from 'react-native';
+import { Stack } from 'expo-router';
 
 import { BarraSuperior } from '../../componentes/BarraSuperior';
-import { nombreRoles, PESTANAS, pestanasPorRol, type Pestana } from '../../sesion/roles';
+import { nombreRoles, PANTALLAS_OBRA, tieneAlgunRol } from '../../sesion/roles';
 import { useSesion } from '../../sesion/sesion';
-import { useTema } from '../../tema';
 
-const iconoPestana =
-  (nombre: Pestana['icono']) =>
-  ({ color, size }: { color: ColorValue; size: number }) => (
-    <MaterialCommunityIcons
-      name={nombre}
-      color={typeof color === 'string' ? color : undefined}
-      size={size}
-    />
-  );
+// Al abrir una pantalla de obra desde un enlace, debajo quedan las pestañas para volver.
+export const unstable_settings = { initialRouteName: '(pestanas)' };
 
-// Pestañas según el rol (criterio 5) y barra superior con el nombre y el rol (criterio 11).
+// Barra superior con el nombre y el rol (001, criterio 11) sobre las pestañas `(pestanas)` y sobre
+// las pantallas de una obra (`obras/[id]/…`), que se apilan encima de las pestañas con «atrás».
+// Cada pantalla de obra solo existe para su rol (Stack.Protected).
 export default function AppLayout() {
-  const { colors } = useTema();
   const { sesion, cerrarSesion } = useSesion();
   const usuario = sesion.estado === 'activa' ? sesion.usuario : null;
   const roles = usuario?.roles ?? [];
-  const visibles = new Set(pestanasPorRol(roles).map((pestana) => pestana.ruta));
-  const nombre = usuario?.nombre ?? '';
-  const rol = nombreRoles(roles);
 
   return (
-    <Tabs
+    <Stack
       screenOptions={{
-        header: () => (
-          <BarraSuperior nombre={nombre} rol={rol} onCerrarSesion={() => void cerrarSesion()} />
+        header: ({ back, navigation }) => (
+          <BarraSuperior
+            nombre={usuario?.nombre ?? ''}
+            rol={nombreRoles(roles)}
+            onCerrarSesion={() => void cerrarSesion()}
+            onVolver={back ? () => navigation.goBack() : undefined}
+          />
         ),
-        tabBarActiveTintColor: colors.primary,
-        tabBarInactiveTintColor: colors.textoSecundario,
       }}
     >
-      {PESTANAS.map((pestana) => (
-        <Tabs.Protected key={pestana.ruta} guard={visibles.has(pestana.ruta)}>
-          <Tabs.Screen
-            name={pestana.ruta}
-            options={{ title: pestana.titulo, tabBarIcon: iconoPestana(pestana.icono) }}
-          />
-        </Tabs.Protected>
+      <Stack.Screen name="(pestanas)" />
+      {PANTALLAS_OBRA.map((pantalla) => (
+        <Stack.Protected key={pantalla.ruta} guard={tieneAlgunRol(roles, pantalla.roles)}>
+          <Stack.Screen name={pantalla.ruta} options={{ title: pantalla.titulo }} />
+        </Stack.Protected>
       ))}
-    </Tabs>
+    </Stack>
   );
 }

@@ -9,13 +9,18 @@ type Props = {
   /** Rol que se muestra debajo del nombre (criterio 11). */
   rol: string;
   onCerrarSesion: () => void;
+  /** Si hay pantalla anterior, muestra «Volver». */
+  onVolver?: () => void;
 };
 
-/** Barra superior de la app (color primario, docs/diseno-visual.md): nombre, rol y «Cerrar sesión». */
-export function BarraSuperior({ nombre, rol, onCerrarSesion }: Props) {
+/** Barra superior de la app (color primario, docs/diseno-visual.md): «Volver», nombre, rol y «Cerrar sesión». */
+export function BarraSuperior({ nombre, rol, onCerrarSesion, onVolver }: Props) {
   const { colors } = useTema();
   return (
     <Appbar.Header style={{ backgroundColor: colors.primary }}>
+      {onVolver ? (
+        <Appbar.BackAction color={colors.onPrimary} accessibilityLabel="Volver" onPress={onVolver} />
+      ) : null}
       <Appbar.Content
         title={
           <View>
