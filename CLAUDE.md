@@ -29,8 +29,8 @@ npx expo export --platform android --output-dir <carpeta temporal fuera del repo
 ### Celular en desarrollo (Android)
 
 - `app.json` → `extra` apunta a `localhost`: `keycloakUrl` `http://localhost:8080` (realm `supervision`, cliente `app-obra`), `obrasUrl` `http://localhost:8081`, `materialesUrl` `http://localhost:8082`. **No se cambia por la IP de la computadora:** el emisor (`iss`) del token tiene que ser `http://localhost:8080/realms/supervision`, el mismo que validan los servicios; si el celular entrara por la IP, el token saldría con otro emisor y los servicios lo rechazarían.
-- El celular llega a esos puertos de la computadora con `adb reverse` (cable USB o depuración inalámbrica), con el script de `adb reverse` de `infra`. Metro usa el **8090** (el 8081 es de Obras) y arranca con `--localhost`, así Expo Go también carga el código por `adb reverse`.
-- Orden: levantar `infra` y los servicios, ejecutar el script de `adb reverse`, `npm start` y abrir en Expo Go la dirección `exp://` que muestra Metro (puerto 8090).
+- El celular llega a esos puertos de la computadora con `adb reverse` (cable USB o depuración inalámbrica), con `infra/scripts/celular.ps1` (o `.sh`), que hace `adb reverse` de 8080, 8081, 8082 y 8090. Metro usa el **8090** (el 8081 es de Obras) y arranca con `--localhost`, así Expo Go también carga el código por `adb reverse`.
+- Orden: levantar `infra` y los servicios, ejecutar `infra/scripts/celular.ps1`, `npm start` y abrir en Expo Go la dirección `exp://` que muestra Metro (puerto 8090).
 - El esquema propio es `appobra` (`app.json` → `scheme`). En Expo Go la vuelta del inicio de sesión llega por `exp://…`; en un *development build*, por `appobra://…`. El realm acepta los dos (`exp://*` y `appobra://*`).
 
 ## Estructura
