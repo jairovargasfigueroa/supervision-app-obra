@@ -10,12 +10,12 @@ Expo SDK 58, `expo-router`, `react-native-paper` 5 + `react-native-safe-area-con
 
 `src/tema.ts`: `MD3LightTheme` de Paper extendido con los colores de `docs/diseno-visual.md` (primario `#0E4D5C`, secundario `#F08A24`, éxito `#1B7343`, atención `#9A4A00`, error `#B42318`, fondo `#F2F5F6`), `roundness` de 1,2 (botones de 6 px) y las constantes `radios.tarjeta` (10) y `radios.control` (6) para tarjetas, diálogos y campos, porque Paper deriva todos los radios de un solo valor. Inter con `expo-font`.
 
-- Inter se carga en `App.tsx` (en la 001, en `src/app/_layout.tsx`) con `useFonts(fuentesInter)`: una sola familia `Inter` con las caras 400, 500 y 600, que se eligen con `fontWeight` (se importan por subruta, `@expo-google-fonts/inter/400Regular`, para no empaquetar las 18 caras). Títulos (`headline*`, `titleLarge`) en 600.
+- Inter se carga en `src/app/_layout.tsx` con `useFonts(fuentesInter)`: una sola familia `Inter` con las caras 400, 500 y 600, que se eligen con `fontWeight` (se importan por subruta, `@expo-google-fonts/inter/400Regular`, para no empaquetar las 18 caras). Títulos (`headline*`, `titleLarge`) en 600.
 - Si Inter no carga se usa `temaSistema` (mismos colores, fuente del sistema).
 - Los tokens sin equivalente en MD3 (`exito`, `atencion`, `errorSuave`, `borde`, `textoSecundario`…) van en `colors` y se leen con `useTema()`.
 - `nucleo/formato.ts` no usa `Intl`: arma los separadores de es-BO a mano y calcula la hora de La Paz con su desfase fijo (UTC−4, sin horario de verano), porque Hermes toma separadores y zonas del sistema del celular y no daría siempre lo mismo que las pruebas en Node.
 
-## Árbol (al migrar a Expo Router en la 001)
+## Árbol
 
 ```
 src/
@@ -50,5 +50,7 @@ src/
 `jest-expo` + Testing Library: cliente REST (reintentos), esquemas Zod, componentes principales. `npm test`, `npx tsc --noEmit` y `npx expo-doctor` antes de cada commit.
 
 - Las pruebas van junto al archivo que prueban (`formato.test.ts`, `estados.test.tsx`).
+- Las rutas (`src/app/`) se prueban desde fuera de esa carpeta, en `src/rutas.test.tsx`, con `renderRouter('src/app')` de `expo-router/testing-library`: todo archivo dentro de `src/app/` es una pantalla, así que ahí no van pruebas.
+- `testTimeout` de Jest en 60 s (`package.json`): la primera prueba que monta Expo Router tarda en cargar los módulos.
 - `jest.setup.ts` simula `expo-font` (fuentes e íconos dados por cargados), porque en Jest no hay archivos de fuentes reales.
 - Compilación sin celular: `npx expo export --platform android`.

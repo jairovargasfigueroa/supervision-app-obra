@@ -1,7 +1,7 @@
 {
   "name": "app-obra",
   "version": "0.1.0",
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "dependencies": {
     "@expo-google-fonts/inter": "^0.4.2",
     "@expo/vector-icons": "^15.0.2",
@@ -44,6 +44,7 @@
     "preset": "jest-expo",
     "setupFiles": [
       "<rootDir>/jest.setup.ts"
-    ]
+    ],
+    "testTimeout": 60000
   }
 }

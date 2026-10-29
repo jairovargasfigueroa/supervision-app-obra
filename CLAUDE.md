@@ -4,14 +4,14 @@ Aplicación móvil para la obra: el maestro de obra registra fotos de avance; el
 
 Parte de la «Plataforma de supervisión de obras». Si existe `../../CLAUDE.md` (carpeta que agrupa todos los proyectos), léelo primero: tiene las reglas transversales, el plan y los contratos generales.
 
-**Estado:** fase 1. Tema de Paper con Inter (`src/tema.ts`), formatos (`src/nucleo/formato.ts`), estados vacío y error (`src/componentes/`) y una pantalla base en `App.tsx`; sin pantallas de negocio. No implementes una funcionalidad sin su especificación aprobada en `docs/specs/`.
+**Estado:** 001 (inicio de sesión). Entrada con Expo Router (`src/app/`), tema de Paper con Inter (`src/tema.ts`), formatos (`src/nucleo/formato.ts`) y estados vacío y error (`src/componentes/`); sin pantallas de negocio. No implementes una funcionalidad sin su especificación aprobada en `docs/specs/`.
 
 Lee también `AGENTS.md`: es la guía oficial de Expo para agentes (consultar la documentación de la versión instalada, usar `npx expo install`, development builds).
 
 ## Stack
 
 - Node 24 · Expo SDK 58 · React Native 0.88 · React 19.3 · TypeScript 6
-- Previsto: Expo Router (navegación por rol), login OIDC con Keycloak mediante `expo-auth-session` (cliente `app-obra`, roles `maestro` y `almacenero`)
+- Expo Router (`main: expo-router/entry`, rutas en `src/app/`, grupos `(auth)` y `(app)`); login OIDC con Keycloak mediante `expo-auth-session` (cliente `app-obra`, roles `maestro` y `almacenero`)
 - Capa 1: base local y cola de envíos con `expo-sqlite` (módulo oficial de Expo) · Capa 3: TensorFlow Lite con `react-native-fast-tflite` (requiere *development build*, no funciona en Expo Go)
 
 ## Comandos
@@ -33,15 +33,16 @@ npx expo export --platform android --output-dir <carpeta temporal fuera del repo
 - Orden: levantar `infra` y los servicios, ejecutar el script de `adb reverse`, `npm start` y abrir en Expo Go la dirección `exp://` que muestra Metro (puerto 8090).
 - El esquema propio es `appobra` (`app.json` → `scheme`). En Expo Go la vuelta del inicio de sesión llega por `exp://…`; en un *development build*, por `appobra://…`. El realm acepta los dos (`exp://*` y `appobra://*`).
 
-## Estructura prevista
+## Estructura
+
+La exacta está en `docs/estructura.md`. En resumen:
 
 ```
-App.tsx / index.ts    entrada actual de la plantilla (se reemplaza al agregar Expo Router)
 src/
-  app/                pantallas (Expo Router)
-  avance/             fotos de avance por partida
-  materiales/         ingresos y salidas, stock de la obra
-  auth/               sesión con Keycloak
+  app/                pantallas (Expo Router): solo rutas; nada de pruebas ni lógica aquí
+  sesion/             sesión con Keycloak
+  api/, formularios/  cliente REST y formularios (004, 005)
+  componentes/, nucleo/, tema.ts
   sync/               cola local y envío (capa 1)
 ```
 
