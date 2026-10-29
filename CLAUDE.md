@@ -4,7 +4,7 @@ Aplicación móvil para la obra: el maestro de obra registra fotos de avance; el
 
 Parte de la «Plataforma de supervisión de obras». Si existe `../../CLAUDE.md` (carpeta que agrupa todos los proyectos), léelo primero: tiene las reglas transversales, el plan y los contratos generales.
 
-**Estado:** proyecto generado con la plantilla `blank-typescript` de Expo, sin pantallas. No implementes una funcionalidad sin su especificación aprobada en `docs/specs/`.
+**Estado:** fase 1. Tema de Paper con Inter (`src/tema.ts`), formatos (`src/nucleo/formato.ts`), estados vacío y error (`src/componentes/`) y una pantalla base en `App.tsx`; sin pantallas de negocio. No implementes una funcionalidad sin su especificación aprobada en `docs/specs/`.
 
 Lee también `AGENTS.md`: es la guía oficial de Expo para agentes (consultar la documentación de la versión instalada, usar `npx expo install`, development builds).
 
@@ -20,6 +20,7 @@ Lee también `AGENTS.md`: es la guía oficial de Expo para agentes (consultar la
 npm install
 npx expo start             # abrir en el celular con Expo Go (escanear el QR)
 npx expo install <paquete> # SIEMPRE así para agregar dependencias (elige la versión compatible con el SDK)
+npm test                   # pruebas (jest-expo + Testing Library)
 npx tsc --noEmit           # revisar tipos
 npx expo-doctor            # revisar dependencias y configuración
 ```
