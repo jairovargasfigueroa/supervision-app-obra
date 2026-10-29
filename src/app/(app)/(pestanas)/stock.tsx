@@ -1,6 +1,16 @@
-import { PantallaVacia } from '../../../componentes/PantallaVacia';
+import { router } from 'expo-router';
 
-// Stock de la obra (almacenero): la pantalla real llega con la 004 (`obras/[id]/stock`); sin obras, el estado vacío.
+import { ObrasAsignadas } from '../../../componentes/ObrasAsignadas';
+import { rutaDeObra } from '../../../sesion/roles';
+
+// Stock de la obra (almacenero): primero se elige la obra; el stock se ve en `obras/[id]/stock`
+// (004, criterio 9).
 export default function Stock() {
-  return <PantallaVacia icono="package-variant-closed" />;
+  return (
+    <ObrasAsignadas
+      icono="package-variant-closed"
+      titulo="Elige la obra"
+      onElegir={(obra) => router.push(rutaDeObra('obras/[id]/stock', obra.id))}
+    />
+  );
 }

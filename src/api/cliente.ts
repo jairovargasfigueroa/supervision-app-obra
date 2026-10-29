@@ -2,7 +2,9 @@
 // (Problem Details, convenciones «Errores REST»). Sin estado: el token se pide en cada llamada a
 // `obtenerToken` de la sesión, que lo renueva si está por vencer.
 import { QueryClient } from '@tanstack/react-query';
+import type { z } from 'zod';
 
+import { configuracion } from '../nucleo/configuracion';
 import { nuevoUuid } from '../nucleo/uuid';
 import { codigoGenerico, ErrorApi, esReintentable, falloDe } from './errores';
 import { enviar } from './red';
@@ -95,6 +97,15 @@ export async function pedir<T = unknown>(
   return { estado: respuesta.status, datos: datos as T };
 }
 
+/** Valida la respuesta de un servicio con Zod; si no es la del contrato, `respuesta-invalida`. */
+export function validar<T>(esquema: z.ZodType<T>, datos: unknown): T {
+  const resultado = esquema.safeParse(datos);
+  if (!resultado.success) {
+    throw new ErrorApi({ tipo: 'respuesta-invalida' });
+  }
+  return resultado.data;
+}
+
 /** Reintentos de las consultas: hasta 3, a 1 s, 2 s y 4 s, solo si el error puede pasar solo. */
 export const MAX_REINTENTOS_CONSULTA = 3;
 
@@ -106,7 +117,64 @@ export function esperaReintento(intento: number): number {
   return 1000 * 2 ** intento;
 }
 
-/** Cliente de TanStack Query de la app. Las escrituras no se reintentan solas. */
+/**
+ * Reintentos de un registro (diseño 004, «App»): hasta 3, a 1 s, 2 s y 4 s, solo ante un error de
+ * red (sin respuesta o tiempo agotado) o `503`. Se puede repetir porque el registro lleva su `id`
+ * (UUID del celular) y el servicio no lo procesa dos veces (`200` con el existente).
+ */
+export const MAX_REINTENTOS_ENVIO = 3;
+
+export function reintentarEnvio(intentosFallidos: number, error: unknown): boolean {
+  if (intentosFallidos >= MAX_REINTENTOS_ENVIO) {
+    return false;
+  }
+  const fallo = falloDe(error);
+  return fallo.tipo === 'red' || fallo.tipo === 'tiempo' || (fallo.tipo === 'http' && fallo.estado === 503);
+}
+
+const dormir = (ms: number) => new Promise<void>((listo) => setTimeout(listo, ms));
+
+type OpcionesReintento = {
+  /** Si vale la pena otro intento tras `intentosFallidos` fallos. */
+  reintentar?: (intentosFallidos: number, error: unknown) => boolean;
+  /** Espera entre intentos (las pruebas la reemplazan para no esperar de verdad). */
+  esperar?: (ms: number) => Promise<void>;
+};
+
+/**
+ * Repite `operacion` mientras `reintentar` lo diga, esperando 1 s, 2 s y 4 s. `operacion` debe
+ * enviar siempre lo mismo (mismo cuerpo y mismo `id`): así un intento que sí llegó al servicio no
+ * crea un registro nuevo. Si se acaban los intentos, lanza el último error.
+ */
+export async function conReintentos<T>(
+  operacion: () => Promise<T>,
+  { reintentar = reintentarEnvio, esperar = dormir }: OpcionesReintento = {},
+): Promise<T> {
+  for (let fallidos = 0; ; fallidos++) {
+    try {
+      return await operacion();
+    } catch (error) {
+      if (!reintentar(fallidos, error)) {
+        throw error;
+      }
+      await esperar(esperaReintento(fallidos));
+    }
+  }
+}
+
+export type Servicio = 'obras' | 'materiales';
+
+/** URL de una ruta de un servicio, con la base de app.json → extra (`obrasUrl`, `materialesUrl`). */
+export function urlServicio(servicio: Servicio, ruta: string): string {
+  const config = configuracion();
+  const base = servicio === 'obras' ? config.obrasUrl : config.materialesUrl;
+  return `${base.replace(/\/+$/, '')}${ruta}`;
+}
+
+/**
+ * Cliente de TanStack Query de la app. Las escrituras no se reintentan solas: las que se pueden
+ * repetir sin duplicar (un movimiento con su `id`) usan `conReintentos` dentro de su función.
+ */
 export function crearClienteConsultas(): QueryClient {
   return new QueryClient({
     defaultOptions: {

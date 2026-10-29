@@ -16,12 +16,14 @@ type Props = {
   titulo?: string;
   /** Al pulsar la tarjeta de una obra. */
   onElegir?: (obra: Obra) => void;
-  /** Botón en cada tarjeta, p. ej. «Foto de avance». */
-  accion?: { texto: string; icono: string; onPress: (obra: Obra) => void };
+  /** Botones de cada tarjeta, p. ej. «Foto de avance» o «Ingreso», «Salida» y «Stock». */
+  acciones?: readonly Accion[];
 };
 
+type Accion = { texto: string; icono: string; onPress: (obra: Obra) => void };
+
 /** Obras asignadas al usuario (`GET /obras`), con sus estados de carga, vacío y error. */
-export function ObrasAsignadas({ icono, titulo, onElegir, accion }: Props) {
+export function ObrasAsignadas({ icono, titulo, onElegir, acciones = [] }: Props) {
   const { obtenerToken } = useSesion();
   const { colors } = useTema();
   const consulta = useQuery(obrasAsignadasQuery(obtenerToken));
@@ -78,17 +80,20 @@ export function ObrasAsignadas({ icono, titulo, onElegir, accion }: Props) {
             titleVariant="titleMedium"
             subtitleNumberOfLines={2}
           />
-          {accion ? (
-            <Card.Actions>
-              <Button
-                mode="contained"
-                icon={accion.icono}
-                onPress={() => accion.onPress(obra)}
-                accessibilityLabel={`${accion.texto}: ${obra.nombre}`}
-                contentStyle={estilos.boton}
-              >
-                {accion.texto}
-              </Button>
+          {acciones.length > 0 ? (
+            <Card.Actions style={estilos.acciones}>
+              {acciones.map((accion) => (
+                <Button
+                  key={accion.texto}
+                  mode={acciones.length === 1 ? 'contained' : 'outlined'}
+                  icon={accion.icono}
+                  onPress={() => accion.onPress(obra)}
+                  accessibilityLabel={`${accion.texto}: ${obra.nombre}`}
+                  contentStyle={estilos.boton}
+                >
+                  {accion.texto}
+                </Button>
+              ))}
             </Card.Actions>
           ) : null}
         </Card>
@@ -101,5 +106,7 @@ const estilos = StyleSheet.create({
   centro: { flex: 1, justifyContent: 'center', padding: 16 },
   lista: { padding: 16, gap: 12 },
   tarjeta: { borderRadius: radios.tarjeta },
+  // Con varios botones (almacenero, o los dos roles) bajan de renglón en pantallas de 360 px.
+  acciones: { flexWrap: 'wrap', justifyContent: 'flex-start', rowGap: 8 },
   boton: { minHeight: TAMANO_TACTIL_MINIMO },
 });

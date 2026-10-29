@@ -41,14 +41,20 @@ src/
                    tokens.ts (secure-store), token.ts (lee el JWT), renovacion.ts (cuándo renovar),
                    roles.ts (roles efectivos, pestañas y pantallas de obra por rol, nombre del rol)
   api/             red.ts (única llamada a fetch), cliente.ts (token, tiempo máximo, X-Request-Id, errores por
-                   codigo; QueryClient con reintentos 1-2-4 s), errores.ts (ErrorApi y textos de docs/mensajes.md),
+                   codigo, URL de cada servicio, validación Zod de la respuesta; QueryClient con reintentos
+                   1-2-4 s de las consultas y conReintentos para repetir un registro con su id), errores.ts (ErrorApi y textos de docs/mensajes.md),
                    obras.ts, materiales.ts (funciones + queryOptions), subida.ts (lee la foto y hace el PUT a S3)
-  formularios/     movimiento.esquema.ts, foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
+  formularios/     movimiento.esquema.ts (campos y cuerpo de POST /movimientos, Zod), movimiento.ts (qué registro
+                   se envía y con qué id, avisos de stock superado y periodo cerrado), useMovimiento.ts (TanStack
+                   Form + envío), foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
                    foto.envio.ts (envío con reintento y qué hacer tras cada fallo), useFotoAvance.ts (estado de la pantalla)
   componentes/     BarraSuperior.tsx, PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
-                   ObrasAsignadas.tsx (lista de GET /obras), SelectorMaterial.tsx, SelectorPartida.tsx
+                   ObrasAsignadas.tsx (lista de GET /obras), ConObra.tsx (carga GET /obras/{id} para una
+                   pantalla de obra), FormularioMovimiento.tsx (ingreso y salida), StockObra.tsx,
+                   SelectorMaterial.tsx (con búsqueda), SelectorPartida.tsx
   sync/            (capa 1) cola.ts, base-local.ts
-  nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod)
+  nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
+                   estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
                    imagen-simulada.ts (cámara, galería y compresión)
   tema.ts
@@ -62,7 +68,7 @@ src/
 - Cerrar sesión (barra superior y «No tienes acceso»): borra los tokens de `expo-secure-store` y hace `POST` al `end_session_endpoint` del realm con `client_id` y `refresh_token` (cierre por canal trasero, `204`). Así termina la sesión SSO de Keycloak y la próxima vez se pide la contraseña. Sin conexión, los tokens igual se borran del celular.
 - Al abrir la app sin sesión, el inicio de sesión de Keycloak se abre solo una vez (criterio 1); después de cerrar sesión o de una sesión vencida se espera a que el usuario pulse «Iniciar sesión».
 - Roles (`roles.ts`): en la app solo cuentan `maestro` y `almacenero` del token (`realm_access.roles`, `azp = app-obra`); los demás se ignoran. Pestañas: `maestro` → Mis obras, Foto de avance; `almacenero` → Mis obras, Ingreso, Salida, Stock; con los dos, la unión sin repetir Mis obras. La barra superior muestra el `name` del token y «Maestro de obra», «Almacenero» o los dos.
-- Las pestañas Ingreso, Salida y Stock muestran por ahora el estado vacío («Aún no hay obras asignadas.»). Las pantallas reales son `obras/[id]/…` (004 y 005): cada una decide ahí cómo se elige la obra desde su pestaña.
+- Las pestañas Foto de avance, Ingreso, Salida y Stock listan las obras asignadas («Elige la obra») y llevan a la pantalla de la obra (`obras/[id]/…`); sin obras, el estado vacío («Aún no hay obras asignadas.»).
 - Las pantallas de una obra (`obras/[id]/…`) no van dentro de las pestañas sino en el Stack de `(app)/_layout.tsx`, encima de `(pestanas)`: en Expo Router 58 una pestaña oculta (`href: null`) ya no se puede abrir (redirige a la primera pestaña). Se protegen con `Stack.Protected` según `PANTALLAS_OBRA` de `roles.ts`, y `unstable_settings.initialRouteName = '(pestanas)'` deja las pestañas debajo si se abren desde un enlace. La barra superior la pone ese Stack, con «Volver» cuando hay pantalla anterior.
 - `src/app/_layout.tsx` usa `Stack.Protected`: sin sesión solo existe `(auth)/iniciar-sesion`; con sesión y rol de la app, `(app)`; con sesión sin rol de la app, `(auth)/sin-acceso`. `(app)/(pestanas)/_layout.tsx` usa `Tabs.Protected` para que un rol no llegue a las pestañas de otro. Al terminar la sesión se vacía la caché de TanStack Query (`queryClient.clear()`), para que no quede nada del usuario anterior.
 
@@ -77,6 +83,16 @@ src/
 - Reintento (criterio 5): lo hecho queda en memoria (`EnvioFoto`: `fotoId`, archivo comprimido, última URL y si ya se subió) hasta que se registra. «Reintentar» sigue desde el paso que falló, con el mismo `fotoId` y el mismo archivo, sin volver a tomar ni comprimir la foto: si ya se subió, solo registra; si la URL vence en menos de 30 s, o S3 rechaza el `PUT` con `403` (URL vencida), pide otra con el mismo `fotoId`.
 - Tras un fallo se muestra «No se pudo enviar.» con el texto de `docs/mensajes.md`, y `decidirTrasFallo` (función pura) elige qué ofrecer: sin señal, tiempo agotado, `429`, `5xx` (también `503 SERVICIO_NO_DISPONIBLE` mientras no exista el bucket) o un rechazo de S3 → «Reintentar»; `422 PARTIDA_NO_ES_DE_LA_OBRA` → «Actualizar datos» y elegir otra partida (mismo `fotoId`); `422 CLAVE_ARCHIVO_INVALIDA`, `413`, `400` o la foto perdida → se descarta la foto para tomar otra; `403` y `404 OBRA_NO_ENCONTRADA` → sin reintento; `401` o sesión terminada → «Iniciar sesión».
 
+## Movimientos de material (004)
+
+- Se llega a `obras/[id]/ingreso`, `obras/[id]/salida` y `obras/[id]/stock` (solo `almacenero`, `Stack.Protected` con `PANTALLAS_OBRA`) de dos formas (criterio 1): desde «Mis obras», con los botones «Ingreso», «Salida» y «Stock» de cada obra (`pantallasObraPorRol`: con los dos roles salen también «Foto de avance»; los botones bajan de renglón a 360 px), o desde la pestaña del mismo nombre, que pide elegir la obra.
+- Cada pantalla carga la obra con `ConObra` (`GET /obras/{id}`: nombre y partidas) y lleva `key={id}`.
+- Ingreso y Salida comparten `FormularioMovimiento` (TanStack Form con el esquema Zod de `movimiento.esquema.ts` en `onChange` y `onSubmit`; los errores se muestran junto al campo cuando se tocó o tras pulsar el botón). Material: los activos del catálogo (`GET /materiales?soloActivos=true`, todas las páginas de 100) con búsqueda por código o nombre si son más de 8, y bajo la lista su stock en la obra (`GET /obras/{obraId}/stock`; sin fila, 0). Cantidad: texto con coma o punto, > 0 y hasta 3 decimales (`leerCantidad`). Ingreso: nota de remisión opcional (`notaRemision` solo si se escribió). Salida: partida de destino obligatoria (`SelectorPartida`).
+- `id` del registro (criterio 6): UUID de `expo-crypto` creado al abrir el formulario. «Registrar» envía `POST /movimientos` y, ante error de red, tiempo agotado o `503`, lo repite solo hasta 3 veces (1 s, 2 s, 4 s) con el mismo cuerpo (`conReintentos`). Si al final falla, el registro queda pendiente en memoria: pulsar otra vez con los mismos datos lo repite con el mismo `id` y el mismo `registradoEn`; si los datos cambiaron, es otro registro con otro `id` (`registroParaEnviar`). `201` y `200` (ya existía) son éxito: «Registrado», se vacía el formulario y se crea un `id` nuevo.
+- Stock (criterio 9): `GET /obras/{obraId}/stock` en tarjetas (código · nombre, cantidad y mínimo con su unidad en singular o plural, y el estado), en el orden del servicio (por código), con «tirar para actualizar». El estado va en `EstadoChip` con las etiquetas y tonos del ERP (`estado-stock.ts`: `BAJO` «Bajo» error, `JUSTO` «Justo» atención, `OK` «OK» éxito; fondo suave y texto del color fuerte) y arriba la regla de los estados, el mismo texto que el ERP. Sin filas: «Esta obra todavía no tiene materiales con movimientos ni mínimo definido.» (texto del ERP, 003). El mismo chip acompaña al stock del material en Ingreso y Salida.
+- Tras registrar (criterio 4), la fila del material en la caché del stock se reemplaza con el `stock` de la respuesta y se vuelve a pedir el stock de la obra.
+- Avisos: con `superaStock` (criterio 5), «La salida supera el stock registrado (stock: X). Queda como alerta para revisión», donde X es el stock que había antes de la salida (el `stock.cantidad` de la respuesta más la cantidad que salió) con su unidad. `409 PERIODO_CERRADO` (criterio 7): «El periodo AAAA-MM ya está cerrado», con el mes de `registradoEn` en La Paz (`periodoLaPaz`, la misma regla que Materiales). Los demás errores, con su texto de `errores.ts` (`MATERIAL_INACTIVO`, `OBRA_NO_ENCONTRADA`, genéricos).
+
 ## Reglas
 
 - Componentes de Paper (`Button`, `TextInput`, `Card`, `List`, `Chip`, `Snackbar`, `Dialog`); nada de estilos sueltos si Paper lo resuelve.
@@ -86,7 +102,7 @@ src/
 
 ## Pruebas
 
-`jest-expo` + Testing Library: cliente REST (reintentos), esquemas Zod, componentes principales. `npm test`, `npx tsc --noEmit` y `npx expo-doctor` antes de cada commit.
+`jest-expo` + Testing Library: cliente REST (reintentos; en `materiales.test.ts`, el movimiento repetido a 1 s, 2 s y 4 s con el mismo cuerpo e `id` ante red, tiempo agotado o `503`, `200` como éxito y los `4xx`/`500` sin reintento), esquemas Zod, componentes principales. `npm test`, `npx tsc --noEmit` y `npx expo-doctor` antes de cada commit.
 
 - Las pruebas van junto al archivo que prueban (`formato.test.ts`, `estados.test.tsx`).
 - Las rutas (`src/app/`) se prueban desde fuera de esa carpeta, en `src/rutas.test.tsx`, con `renderRouter('src/app')` de `expo-router/testing-library`: todo archivo dentro de `src/app/` es una pantalla, así que ahí no van pruebas.

@@ -1,26 +1,23 @@
 import { router } from 'expo-router';
 
 import { ObrasAsignadas } from '../../../../componentes/ObrasAsignadas';
-import { tieneAlgunRol } from '../../../../sesion/roles';
+import { pantallasObraPorRol, rutaDeObra } from '../../../../sesion/roles';
 import { useSesion } from '../../../../sesion/sesion';
 
-// Mis obras (maestro y almacenero): las obras asignadas. El maestro tiene en cada una «Foto de
-// avance» (005, criterio 1); las acciones del almacenero llegan con la 004.
+// Mis obras (maestro y almacenero): las obras asignadas, con un botón por cada pantalla de obra del
+// rol: «Foto de avance» para el maestro (005, criterio 1); «Ingreso», «Salida» y «Stock» para el
+// almacenero (004, criterio 1).
 export default function MisObras() {
   const { sesion } = useSesion();
-  const esMaestro = sesion.estado === 'activa' && tieneAlgunRol(sesion.usuario.roles, ['maestro']);
+  const roles = sesion.estado === 'activa' ? sesion.usuario.roles : [];
   return (
     <ObrasAsignadas
       icono="office-building-outline"
-      accion={
-        esMaestro
-          ? {
-              texto: 'Foto de avance',
-              icono: 'camera-outline',
-              onPress: (obra) => router.push(`/obras/${obra.id}/foto`),
-            }
-          : undefined
-      }
+      acciones={pantallasObraPorRol(roles).map((pantalla) => ({
+        texto: pantalla.accion,
+        icono: pantalla.icono,
+        onPress: (obra) => router.push(rutaDeObra(pantalla.ruta, obra.id)),
+      }))}
     />
   );
 }

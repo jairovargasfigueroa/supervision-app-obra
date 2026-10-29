@@ -1,6 +1,16 @@
-import { PantallaVacia } from '../../../componentes/PantallaVacia';
+import { router } from 'expo-router';
 
-// Salida de material (almacenero): la pantalla real llega con la 004 (`obras/[id]/salida`); sin obras, el estado vacío.
+import { ObrasAsignadas } from '../../../componentes/ObrasAsignadas';
+import { rutaDeObra } from '../../../sesion/roles';
+
+// Salida de material (almacenero): primero se elige la obra; la salida se registra en
+// `obras/[id]/salida` (004, criterios 1 y 3).
 export default function Salida() {
-  return <PantallaVacia icono="tray-arrow-up" />;
+  return (
+    <ObrasAsignadas
+      icono="tray-arrow-up"
+      titulo="Elige la obra"
+      onElegir={(obra) => router.push(rutaDeObra('obras/[id]/salida', obra.id))}
+    />
+  );
 }

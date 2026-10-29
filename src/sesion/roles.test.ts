@@ -1,7 +1,9 @@
 import {
   nombreRoles,
+  pantallasObraPorRol,
   pestanasPorRol,
   rolesEfectivos,
+  rutaDeObra,
   tieneAccesoApp,
   tieneAlgunRol,
 } from './roles';
@@ -59,5 +61,20 @@ describe('tieneAlgunRol', () => {
   it('cuenta solo los roles de la app', () => {
     expect(tieneAlgunRol(['maestro'], ['maestro'])).toBe(true);
     expect(tieneAlgunRol(['almacenero', 'residente'], ['maestro'])).toBe(false);
+  });
+});
+
+describe('pantallas de una obra («Mis obras»)', () => {
+  const acciones = (roles: string[]) => pantallasObraPorRol(roles).map((pantalla) => pantalla.accion);
+
+  it('maestro → Foto de avance; almacenero → Ingreso, Salida y Stock; con los dos, todas', () => {
+    expect(acciones(['maestro'])).toEqual(['Foto de avance']);
+    expect(acciones(['almacenero', 'residente'])).toEqual(['Ingreso', 'Salida', 'Stock']);
+    expect(acciones(['almacenero', 'maestro'])).toEqual(['Foto de avance', 'Ingreso', 'Salida', 'Stock']);
+    expect(acciones(['residente'])).toEqual([]);
+  });
+
+  it('rutaDeObra arma la dirección con el id de la obra', () => {
+    expect(rutaDeObra('obras/[id]/ingreso', 'o1')).toBe('/obras/o1/ingreso');
   });
 });
