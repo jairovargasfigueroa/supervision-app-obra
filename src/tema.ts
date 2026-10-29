@@ -29,6 +29,18 @@ export const colores = {
   errorSuave: '#FCE8E6',
 } as const;
 
+/**
+ * Radios de docs/diseno-visual.md («Forma y espacios»). Paper deriva todos los radios de `roundness`
+ * (botón ×5, tarjeta ×3, diálogo ×7, campo ×1), así que no hay un valor único que los cumpla:
+ * `roundness` deja los botones en 6 y tarjetas, diálogos y campos usan estos valores en su `style`
+ * (`Card style={{ borderRadius: radios.tarjeta }}`, `TextInput outlineStyle={{ borderRadius: radios.control }}`).
+ */
+export const radios = {
+  tarjeta: 10,
+  control: 6,
+  chip: 999,
+} as const;
+
 /** Objetivo táctil mínimo (docs/diseno-visual.md, «Pantallas chicas»). */
 export const TAMANO_TACTIL_MINIMO = 44;
 
@@ -125,7 +137,8 @@ const coloresPaper = {
 export const tema = {
   ...MD3LightTheme,
   dark: false,
-  roundness: 2,
+  // Botones de Paper: 5 × 1.2 = 6 px (radios.control)
+  roundness: radios.control / 5,
   colors: coloresPaper,
   fonts: fuentesCon(FAMILIA_INTER),
 };
