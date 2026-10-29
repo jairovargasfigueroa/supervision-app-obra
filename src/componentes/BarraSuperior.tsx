@@ -8,10 +8,11 @@ type Props = {
   nombre: string;
   /** Rol que se muestra debajo del nombre (criterio 11). */
   rol: string;
+  onCerrarSesion: () => void;
 };
 
-/** Barra superior de la app (color primario, docs/diseno-visual.md): nombre y rol del usuario. */
-export function BarraSuperior({ nombre, rol }: Props) {
+/** Barra superior de la app (color primario, docs/diseno-visual.md): nombre, rol y «Cerrar sesión». */
+export function BarraSuperior({ nombre, rol, onCerrarSesion }: Props) {
   const { colors } = useTema();
   return (
     <Appbar.Header style={{ backgroundColor: colors.primary }}>
@@ -32,6 +33,12 @@ export function BarraSuperior({ nombre, rol }: Props) {
             ) : null}
           </View>
         }
+      />
+      <Appbar.Action
+        icon="logout"
+        color={colors.onPrimary}
+        accessibilityLabel="Cerrar sesión"
+        onPress={onCerrarSesion}
       />
     </Appbar.Header>
   );

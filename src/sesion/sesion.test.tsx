@@ -3,7 +3,7 @@ import { Text } from 'react-native';
 
 import { tokenDeUsuario } from '../pruebas/jwt';
 import { contenidoSecureStore } from '../pruebas/secure-store-simulado';
-import { iniciarSesionKeycloak, renovarTokens } from './keycloak';
+import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './keycloak';
 import { RenovacionRechazada } from './renovacion';
 import { MENSAJES_SESION, SesionProvider, useSesion } from './sesion';
 import { guardarTokens, leerTokens, type Tokens } from './tokens';
@@ -12,6 +12,7 @@ jest.mock('./keycloak');
 
 const iniciarMock = jest.mocked(iniciarSesionKeycloak);
 const renovarMock = jest.mocked(renovarTokens);
+const cerrarMock = jest.mocked(cerrarSesionKeycloak);
 
 const ahora = () => Math.floor(Date.now() / 1000);
 const tokens = (venceEn: number, acceso = tokenDeUsuario(['maestro'])): Tokens => ({
@@ -164,5 +165,26 @@ describe('SesionProvider', () => {
     } finally {
       jest.useRealTimers();
     }
+  });
+
+  it('cerrar sesión borra los tokens guardados y llama al end_session_endpoint', async () => {
+    cerrarMock.mockResolvedValue(true);
+    await guardarTokens(tokens(ahora() + 300));
+    await montar();
+    await screen.findByText('activa:Juan Pérez');
+    await act(() => valor.cerrarSesion());
+    expect(screen.getByText('sin-sesion:cerrada')).toBeTruthy();
+    expect(contenidoSecureStore()).toEqual({});
+    expect(cerrarMock).toHaveBeenCalledWith('r-guardado');
+  });
+
+  it('sin conexión, cerrar sesión igual borra los tokens del celular', async () => {
+    cerrarMock.mockResolvedValue(false);
+    await guardarTokens(tokens(ahora() + 300));
+    await montar();
+    await screen.findByText('activa:Juan Pérez');
+    await act(() => valor.cerrarSesion());
+    expect(screen.getByText('sin-sesion:cerrada')).toBeTruthy();
+    expect(contenidoSecureStore()).toEqual({});
   });
 });

@@ -103,3 +103,28 @@ export async function renovarTokens(refreshToken: string): Promise<Tokens> {
     throw error;
   }
 }
+
+/**
+ * Cierra la sesión en Keycloak: `POST` al `end_session_endpoint` del realm con el refresh token
+ * (cierre por canal trasero de un cliente público). Así termina también la sesión SSO y la próxima
+ * vez se vuelve a pedir la contraseña. Devuelve `false` si no se pudo (sin conexión, por ejemplo).
+ */
+export async function cerrarSesionKeycloak(refreshToken: string): Promise<boolean> {
+  try {
+    const discovery = await obtenerDescubrimiento();
+    if (!discovery.endSessionEndpoint) {
+      return false;
+    }
+    const respuesta = await fetch(discovery.endSessionEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: configuracion().clientId,
+        refresh_token: refreshToken,
+      }).toString(),
+    });
+    return respuesta.ok;
+  } catch {
+    return false;
+  }
+}

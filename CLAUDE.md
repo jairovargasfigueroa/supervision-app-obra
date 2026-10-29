@@ -4,7 +4,7 @@ Aplicación móvil para la obra: el maestro de obra registra fotos de avance; el
 
 Parte de la «Plataforma de supervisión de obras». Si existe `../../CLAUDE.md` (carpeta que agrupa todos los proyectos), léelo primero: tiene las reglas transversales, el plan y los contratos generales.
 
-**Estado:** 001 (inicio de sesión). Entrada con Expo Router (`src/app/`), tema de Paper con Inter (`src/tema.ts`), formatos (`src/nucleo/formato.ts`) y estados vacío y error (`src/componentes/`); sin pantallas de negocio. No implementes una funcionalidad sin su especificación aprobada en `docs/specs/`.
+**Estado:** 001 hecha en la app: Expo Router (`src/app/`), inicio de sesión con Keycloak, renovación y cierre de sesión (`src/sesion/`), pestañas según el rol con su estado vacío y «No tienes acceso». Tema de Paper con Inter (`src/tema.ts`), formatos (`src/nucleo/formato.ts`) y estados vacío y error (`src/componentes/`). Sin pantallas de negocio (llegan con la 004 y la 005). No implementes una funcionalidad sin su especificación aprobada en `docs/specs/`.
 
 Lee también `AGENTS.md`: es la guía oficial de Expo para agentes (consultar la documentación de la versión instalada, usar `npx expo install`, development builds).
 

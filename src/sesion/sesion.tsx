@@ -10,7 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 
-import { iniciarSesionKeycloak, renovarTokens } from './keycloak';
+import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './keycloak';
 import { asegurarVigencia, msHastaRenovar } from './renovacion';
 import { usuarioDelToken, type Usuario } from './token';
 import { borrarTokens, guardarTokens, leerTokens, type Tokens } from './tokens';
@@ -173,8 +173,15 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     void iniciarSesion();
   }, [sesion, iniciarSesion]);
 
+  // Cerrar sesión: primero se borran los tokens del celular (aunque no haya conexión) y después se
+  // cierra la sesión en Keycloak con el end_session_endpoint del realm.
   const cerrarSesion = useCallback(async () => {
+    const refreshToken = tokensRef.current?.refreshToken;
     await terminar('cerrada');
+    if (refreshToken) {
+      // Si no hay conexión, la sesión de Keycloak vence sola (10 h); en el celular ya no queda nada.
+      await cerrarSesionKeycloak(refreshToken);
+    }
   }, [terminar]);
 
   const valor = useMemo<ValorSesion>(

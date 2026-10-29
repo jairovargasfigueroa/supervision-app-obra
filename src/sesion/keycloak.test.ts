@@ -1,7 +1,7 @@
 import * as AuthSession from 'expo-auth-session';
 
 import { crearJwt } from '../pruebas/jwt';
-import { renovarTokens, tokensDeRespuesta } from './keycloak';
+import { cerrarSesionKeycloak, renovarTokens, tokensDeRespuesta } from './keycloak';
 import { RenovacionRechazada } from './renovacion';
 
 jest.mock('expo-auth-session', () => ({
@@ -29,9 +29,15 @@ const DESCUBRIMIENTO: AuthSession.DiscoveryDocument = {
 
 const refreshMock = jest.mocked(AuthSession.refreshAsync);
 
+const fetchOriginal = globalThis.fetch;
+
 describe('keycloak', () => {
   beforeEach(() => {
     jest.mocked(AuthSession.fetchDiscoveryAsync).mockResolvedValue(DESCUBRIMIENTO);
+  });
+
+  afterEach(() => {
+    globalThis.fetch = fetchOriginal;
   });
 
   it('calcula el vencimiento con expires_in', () => {
@@ -77,5 +83,21 @@ describe('keycloak', () => {
   it('falla de red al renovar → se lanza tal cual (no cierra la sesión)', async () => {
     refreshMock.mockRejectedValue(new TypeError('Network request failed'));
     await expect(renovarTokens('r1')).rejects.toThrow(TypeError);
+  });
+
+  it('cierra la sesión con un POST al end_session_endpoint (client_id y refresh_token)', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 204 });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    await expect(cerrarSesionKeycloak('r1')).resolves.toBe(true);
+    expect(fetchMock).toHaveBeenCalledWith(DESCUBRIMIENTO.endSessionEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'client_id=app-obra&refresh_token=r1',
+    });
+  });
+
+  it('sin conexión el cierre en Keycloak no falla: devuelve false', async () => {
+    globalThis.fetch = jest.fn().mockRejectedValue(new TypeError('Network request failed')) as unknown as typeof fetch;
+    await expect(cerrarSesionKeycloak('r1')).resolves.toBe(false);
   });
 });

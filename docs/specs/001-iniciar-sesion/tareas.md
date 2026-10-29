@@ -8,4 +8,4 @@ Marca cada tarea al terminarla (con sus pruebas y su commit).
 - [x] Migrar la entrada a Expo Router (`src/app/`) con grupos `(auth)` y `(app)`
 - [x] Inicio de sesión con PKCE, guardado seguro de tokens y renovación
 - [x] Pestañas según rol (maestro / almacenero) y pantalla «No tienes acceso»
-- [ ] Cerrar sesión (borra tokens y llama al end_session_endpoint)
+- [x] Cerrar sesión (borra tokens y llama al end_session_endpoint)

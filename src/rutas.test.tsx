@@ -1,7 +1,7 @@
 import { fireEvent, renderRouter, screen } from 'expo-router/testing-library';
 
 import { tokenDeUsuario } from './pruebas/jwt';
-import { iniciarSesionKeycloak, renovarTokens } from './sesion/keycloak';
+import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './sesion/keycloak';
 import { RenovacionRechazada } from './sesion/renovacion';
 import { guardarTokens, leerTokens } from './sesion/tokens';
 
@@ -120,11 +120,24 @@ describe('sin rol de la app (criterio 3)', () => {
     expect(pestanasVisibles()).toEqual([]);
   });
 
-  it('«Cerrar sesión» borra los tokens y vuelve al inicio de sesión', async () => {
+  it('«Cerrar sesión» borra los tokens, cierra la sesión en Keycloak y vuelve al inicio de sesión', async () => {
     await entrarCon(['cliente']);
     await fireEvent.press(await screen.findByText('Cerrar sesión'));
     expect(await screen.findByText('Iniciar sesión')).toBeTruthy();
     expect(screen).toHavePathname('/iniciar-sesion');
     await expect(leerTokens()).resolves.toBeNull();
+    expect(jest.mocked(cerrarSesionKeycloak)).toHaveBeenCalledWith('r1');
+  });
+});
+
+describe('cerrar sesión desde la barra superior', () => {
+  it('borra los tokens, llama al end_session_endpoint y no vuelve a abrir Keycloak solo', async () => {
+    await entrarCon(['maestro']);
+    await fireEvent.press(await screen.findByLabelText('Cerrar sesión'));
+    expect(await screen.findByText('Iniciar sesión')).toBeTruthy();
+    expect(screen).toHavePathname('/iniciar-sesion');
+    await expect(leerTokens()).resolves.toBeNull();
+    expect(jest.mocked(cerrarSesionKeycloak)).toHaveBeenCalledWith('r1');
+    expect(iniciarMock).not.toHaveBeenCalled();
   });
 });
