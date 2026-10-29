@@ -1,9 +1,11 @@
 import {
   formatearCantidad,
+  formatearCantidadMaterial,
   formatearFecha,
   formatearFechaHora,
   formatearMonto,
   formatearPorcentaje,
+  periodoLaPaz,
 } from './formato';
 
 describe('formato', () => {
@@ -47,6 +49,19 @@ describe('formato', () => {
     expect(formatearFechaHora('2026-11-15T18:30:00Z')).toBe('15/11/2026 14:30');
     expect(formatearFechaHora('2026-01-01T03:05:00Z')).toBe('31/12/2025 23:05');
     expect(formatearFechaHora('2026-11-15T14:30:00-04:00')).toBe('15/11/2026 14:30');
+  });
+
+  it('periodo AAAA-MM en hora de La Paz', () => {
+    expect(periodoLaPaz('2026-11-15T14:00:00Z')).toBe('2026-11');
+    // 1 de diciembre a las 02:00 UTC todavía es 30 de noviembre en La Paz.
+    expect(periodoLaPaz('2026-12-01T02:00:00Z')).toBe('2026-11');
+    expect(periodoLaPaz('2027-01-01T04:00:00Z')).toBe('2027-01');
+  });
+
+  it('cantidad de un material con la unidad en singular o plural', () => {
+    expect(formatearCantidadMaterial(1, 'bolsa', 'bolsas')).toBe('1 bolsa');
+    expect(formatearCantidadMaterial(12.5, 'bolsa', 'bolsas')).toBe('12,5 bolsas');
+    expect(formatearCantidadMaterial(0, 'bolsa', 'bolsas')).toBe('0 bolsas');
   });
 
   it('rechaza valores no válidos', () => {

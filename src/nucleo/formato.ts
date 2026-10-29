@@ -85,3 +85,14 @@ export function formatearFechaHora(instante: string | Date): string {
   const laPaz = enLaPaz(instante);
   return `${fechaDe(laPaz)} ${dosDigitos(laPaz.getUTCHours())}:${dosDigitos(laPaz.getUTCMinutes())}`;
 }
+
+/** Periodo `AAAA-MM`: el mes del instante en La Paz (como lo calcula Materiales, diseño 004). */
+export function periodoLaPaz(instante: string | Date): string {
+  const laPaz = enLaPaz(instante);
+  return `${laPaz.getUTCFullYear()}-${dosDigitos(laPaz.getUTCMonth() + 1)}`;
+}
+
+/** Cantidad de un material con su unidad en singular o plural: `1 bolsa`, `12,5 bolsas`, `0 bolsas`. */
+export function formatearCantidadMaterial(cantidad: number, unidad: string, unidadPlural: string): string {
+  return formatearCantidad(cantidad, cantidad === 1 ? unidad : unidadPlural);
+}

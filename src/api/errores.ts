@@ -1,5 +1,5 @@
 // Errores de las llamadas a los servicios y su texto para el usuario (docs/mensajes.md de la carpeta
-// general). Solo están los códigos que la app puede recibir hoy (005 y genéricos); un código que no
+// general). Solo están los códigos que la app puede recibir hoy (004, 005 y genéricos); un código que no
 // está aquí se muestra con el genérico de su estado HTTP.
 
 /** Qué falló en una llamada. */
@@ -56,6 +56,10 @@ export const MENSAJES = {
   OBRA_NO_ENCONTRADA: 'Obra no encontrada',
   PARTIDA_NO_ES_DE_LA_OBRA: 'La partida elegida no pertenece a esta obra.',
   CLAVE_ARCHIVO_INVALIDA: 'No se pudo asociar el archivo a este registro.',
+  PAGINACION_INVALIDA: 'No se pudo cargar la lista. Recarga la página.',
+  MATERIAL_INACTIVO: 'El material está desactivado; no se puede usar en movimientos ni fijarle un mínimo.',
+  // Sin el periodo (docs/mensajes.md, «Marcadores»); con el dato, `mensajePeriodoCerrado`.
+  PERIODO_CERRADO: 'El periodo ya está cerrado',
 } as const satisfies Record<string, string>;
 
 /** Genéricos de los estados que siempre traen código propio, para un código que la app no conoce. */
@@ -64,6 +68,11 @@ const GENERICO_POR_ESTADO: Record<number, string> = {
   409: 'Los datos cambiaron mientras trabajabas. Recarga para ver la última versión.',
   422: 'No se pudo completar la operación porque no cumple una regla del sistema.',
 };
+
+/** `PERIODO_CERRADO` con el periodo del movimiento (004, criterio 7): «El periodo 2026-11 ya está cerrado». */
+export function mensajePeriodoCerrado(periodo: string): string {
+  return `El periodo ${periodo} ya está cerrado`;
+}
 
 export const MENSAJE_SIN_CONEXION =
   'No hay conexión con el servidor. Revisa tu conexión a internet e intenta de nuevo.';

@@ -44,11 +44,14 @@ src/
                    codigo, URL de cada servicio, validación Zod de la respuesta; QueryClient con reintentos
                    1-2-4 s de las consultas y conReintentos para repetir un registro con su id), errores.ts (ErrorApi y textos de docs/mensajes.md),
                    obras.ts, materiales.ts (funciones + queryOptions), subida.ts (lee la foto y hace el PUT a S3)
-  formularios/     movimiento.esquema.ts, foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
+  formularios/     movimiento.esquema.ts (campos y cuerpo de POST /movimientos, Zod), movimiento.ts (qué registro
+                   se envía y con qué id, avisos de stock superado y periodo cerrado), useMovimiento.ts (TanStack
+                   Form + envío), foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
                    foto.envio.ts (envío con reintento y qué hacer tras cada fallo), useFotoAvance.ts (estado de la pantalla)
   componentes/     BarraSuperior.tsx, PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
                    ObrasAsignadas.tsx (lista de GET /obras), ConObra.tsx (carga GET /obras/{id} para una
-                   pantalla de obra), SelectorMaterial.tsx, SelectorPartida.tsx
+                   pantalla de obra), FormularioMovimiento.tsx (ingreso y salida), SelectorMaterial.tsx (con
+                   búsqueda), SelectorPartida.tsx
   sync/            (capa 1) cola.ts, base-local.ts
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
@@ -83,6 +86,10 @@ src/
 
 - Se llega a `obras/[id]/ingreso`, `obras/[id]/salida` y `obras/[id]/stock` (solo `almacenero`, `Stack.Protected` con `PANTALLAS_OBRA`) de dos formas (criterio 1): desde «Mis obras», con los botones «Ingreso», «Salida» y «Stock» de cada obra (`pantallasObraPorRol`: con los dos roles salen también «Foto de avance»; los botones bajan de renglón a 360 px), o desde la pestaña del mismo nombre, que pide elegir la obra.
 - Cada pantalla carga la obra con `ConObra` (`GET /obras/{id}`: nombre y partidas) y lleva `key={id}`.
+- Ingreso y Salida comparten `FormularioMovimiento` (TanStack Form con el esquema Zod de `movimiento.esquema.ts` en `onChange` y `onSubmit`; los errores se muestran junto al campo cuando se tocó o tras pulsar el botón). Material: los activos del catálogo (`GET /materiales?soloActivos=true`, todas las páginas de 100) con búsqueda por código o nombre si son más de 8, y bajo la lista su stock en la obra (`GET /obras/{obraId}/stock`; sin fila, 0). Cantidad: texto con coma o punto, > 0 y hasta 3 decimales (`leerCantidad`). Ingreso: nota de remisión opcional (`notaRemision` solo si se escribió). Salida: partida de destino obligatoria (`SelectorPartida`).
+- `id` del registro (criterio 6): UUID de `expo-crypto` creado al abrir el formulario. «Registrar» envía `POST /movimientos` y, ante error de red, tiempo agotado o `503`, lo repite solo hasta 3 veces (1 s, 2 s, 4 s) con el mismo cuerpo (`conReintentos`). Si al final falla, el registro queda pendiente en memoria: pulsar otra vez con los mismos datos lo repite con el mismo `id` y el mismo `registradoEn`; si los datos cambiaron, es otro registro con otro `id` (`registroParaEnviar`). `201` y `200` (ya existía) son éxito: «Registrado», se vacía el formulario y se crea un `id` nuevo.
+- Tras registrar (criterio 4), la fila del material en la caché del stock se reemplaza con el `stock` de la respuesta y se vuelve a pedir el stock de la obra.
+- Avisos: con `superaStock` (criterio 5), «La salida supera el stock registrado (stock: X). Queda como alerta para revisión», donde X es el stock que había antes de la salida (el `stock.cantidad` de la respuesta más la cantidad que salió) con su unidad. `409 PERIODO_CERRADO` (criterio 7): «El periodo AAAA-MM ya está cerrado», con el mes de `registradoEn` en La Paz (`periodoLaPaz`, la misma regla que Materiales). Los demás errores, con su texto de `errores.ts` (`MATERIAL_INACTIVO`, `OBRA_NO_ENCONTRADA`, genéricos).
 
 ## Reglas
 

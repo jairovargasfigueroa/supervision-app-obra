@@ -1,20 +1,15 @@
 import { useLocalSearchParams } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
 
-import { ConObra, TituloObra } from '../../../../componentes/ConObra';
+import { ConObra } from '../../../../componentes/ConObra';
+import { FormularioMovimiento } from '../../../../componentes/FormularioMovimiento';
 
-// Pantalla de obra del almacenero (004): por ahora solo la obra elegida.
+// Ingreso de material (004, criterio 2): material, cantidad y nota de remisión opcional.
+// Con `key`, el formulario (y su UUID) empieza de cero en cada obra.
 export default function Pantalla() {
   const { id } = useLocalSearchParams<{ id: string }>();
   return (
     <ConObra key={id} id={id}>
-      {(obra) => (
-        <View style={estilos.contenido}>
-          <TituloObra obra={obra} />
-        </View>
-      )}
+      {(obra) => <FormularioMovimiento tipo="INGRESO" obra={obra} />}
     </ConObra>
   );
 }
-
-const estilos = StyleSheet.create({ contenido: { padding: 16 } });

@@ -1,4 +1,4 @@
-import { fireEvent, renderRouter, screen } from 'expo-router/testing-library';
+import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 import { ImageManipulator } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
@@ -45,7 +45,8 @@ beforeEach(() => {
   obras = { 'GET /obras': () => jsonRespuesta(200, []) };
   fetchMock = simularFetch();
   fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
-    const clave = `${init.method ?? 'GET'} ${url.replace('http://localhost:8081', '')}`;
+    // Obras (8081) y Materiales (8082) no comparten rutas: la clave es la ruta sin el servidor.
+    const clave = `${init.method ?? 'GET'} ${url.replace(/^http:\/\/localhost:808[12]/, '')}`;
     const manejador = obras[clave];
     return manejador ? manejador(init) : jsonRespuesta(404, { codigo: 'RUTA_NO_ENCONTRADA' });
   });
@@ -262,8 +263,7 @@ describe('obras del almacenero (004, criterio 1)', () => {
     expect(screen.queryByLabelText('Foto de avance: Edificio Las Palmas')).toBeNull();
 
     await fireEvent.press(screen.getByLabelText('Salida: Edificio Las Palmas'));
-    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
-    expect(screen).toHavePathname('/obras/o1/salida');
+    await waitFor(() => expect(screen).toHavePathname('/obras/o1/salida'));
   });
 
   it('con los dos roles, cada obra tiene los cuatro botones', async () => {
@@ -407,5 +407,161 @@ describe('enviar la foto de avance (005)', () => {
     expect(await screen.findByText('La partida elegida no pertenece a esta obra.')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Actualizar datos/ })).toBeTruthy();
     expect(screen.getByTestId('vista-previa')).toBeTruthy();
+  });
+});
+
+describe('ingreso y salida de material (004)', () => {
+  const MATERIALES = '/materiales?soloActivos=true&pagina=1&tamano=100';
+  const CEMENTO = {
+    id: 'm1', codigo: 'CEM-IP30', nombre: 'Cemento IP-30', tipo: 'CEMENTO',
+    unidad: 'bolsa', unidadPlural: 'bolsas', precioReferencial: 62, activo: true, atributos: [],
+  };
+  const FILA_CEMENTO = {
+    materialId: 'm1', codigo: 'CEM-IP30', nombre: 'Cemento IP-30', unidad: 'bolsa',
+    unidadPlural: 'bolsas', cantidad: 120, minimo: 100, estado: 'JUSTO',
+  };
+  const cuerpo = (init: RequestInit) => JSON.parse(String(init.body));
+  let movimientos: { cuerpo: Record<string, unknown>; init: RequestInit }[];
+  let stockActual: number;
+
+  beforeEach(() => {
+    movimientos = [];
+    stockActual = 120;
+    obras['GET /obras/o1'] = () => jsonRespuesta(200, DETALLE);
+    obras[`GET ${MATERIALES}`] = () =>
+      jsonRespuesta(200, { items: [CEMENTO], total: 1, pagina: 1, tamano: 100 });
+    obras['GET /obras/o1/stock'] = () => jsonRespuesta(200, [{ ...FILA_CEMENTO, cantidad: stockActual }]);
+    obras['POST /movimientos'] = (init) => {
+      const datos = cuerpo(init);
+      const previo = stockActual;
+      stockActual += datos.tipo === 'INGRESO' ? datos.cantidad : -datos.cantidad;
+      movimientos.push({ cuerpo: datos, init });
+      return jsonRespuesta(201, {
+        id: datos.id,
+        periodo: '2026-11',
+        superaStock: datos.tipo === 'SALIDA' && previo < datos.cantidad,
+        stock: { cantidad: stockActual, minimo: 100, estado: stockActual < 100 ? 'BAJO' : 'OK' },
+      });
+    };
+  });
+
+  const abrir = async (ruta: string) => {
+    await guardarTokens(sesionDe(['almacenero']));
+    await renderRouter('src/app', { initialUrl: ruta });
+    await screen.findByText('CEM-IP30 · Cemento IP-30');
+  };
+
+  it('ingreso: material, cantidad y nota de remisión → «Registrado» y el stock se actualiza (criterios 2 y 4)', async () => {
+    await abrir('/obras/o1/ingreso');
+    await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
+    expect(await screen.findByText('Stock: 120 bolsas')).toBeTruthy();
+    await fireEvent.changeText(screen.getByLabelText('Cantidad'), '12,5');
+    await fireEvent.changeText(screen.getByLabelText('Nota de remisión'), 'NR-00123');
+    await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
+
+    expect(await screen.findByText('Registrado')).toBeTruthy();
+    expect(movimientos).toHaveLength(1);
+    const [{ cuerpo: enviado, init }] = movimientos;
+    expect(enviado).toEqual({
+      id: expect.stringMatching(/^[0-9a-f-]{36}$/),
+      obraId: 'o1',
+      materialId: 'm1',
+      tipo: 'INGRESO',
+      cantidad: 12.5,
+      notaRemision: { numero: 'NR-00123' },
+      registradoEn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    });
+    expect(init.headers).toMatchObject({ Authorization: expect.stringMatching(/^Bearer /) });
+    // El formulario queda listo para otro registro; el stock del material ya es el nuevo.
+    await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
+    expect(await screen.findByText('Stock: 132,5 bolsas')).toBeTruthy();
+  });
+
+  it('salida sin partida no se envía y pide elegirla (criterio 3)', async () => {
+    await abrir('/obras/o1/salida');
+    await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
+    await fireEvent.changeText(screen.getByLabelText('Cantidad'), '10');
+    await fireEvent.press(screen.getByRole('button', { name: /Registrar salida/ }));
+    expect(await screen.findByText('Elige la partida de destino.')).toBeTruthy();
+    expect(movimientos).toHaveLength(0);
+  });
+
+  it('salida mayor al stock: se registra igual y muestra el aviso (criterio 5)', async () => {
+    stockActual = 8;
+    await abrir('/obras/o1/salida');
+    await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
+    await fireEvent.changeText(screen.getByLabelText('Cantidad'), '12,5');
+    await fireEvent.press(screen.getByText('P-02 · Muro de ladrillo'));
+    await fireEvent.press(screen.getByRole('button', { name: /Registrar salida/ }));
+
+    expect(await screen.findByText('Registrado')).toBeTruthy();
+    expect(
+      screen.getByText('La salida supera el stock registrado (stock: 8 bolsas). Queda como alerta para revisión'),
+    ).toBeTruthy();
+    expect(movimientos[0].cuerpo).toMatchObject({ tipo: 'SALIDA', cantidad: 12.5, partidaId: 'p2' });
+    expect(movimientos[0].cuerpo).not.toHaveProperty('notaRemision');
+  });
+
+  it('periodo cerrado: lo rechaza con el periodo del movimiento (criterio 7)', async () => {
+    obras['POST /movimientos'] = () =>
+      jsonRespuesta(409, { status: 409, codigo: 'PERIODO_CERRADO' }, 'application/problem+json');
+    await abrir('/obras/o1/ingreso');
+    await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
+    await fireEvent.changeText(screen.getByLabelText('Cantidad'), '5');
+    await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
+    expect(await screen.findByText(/^El periodo \d{4}-\d{2} ya está cerrado$/)).toBeTruthy();
+    expect(screen.queryByText('Registrado')).toBeNull();
+  });
+
+  it('si Materiales responde 503, reintenta solo con el mismo id y un 200 cuenta como registrado (criterio 6)', async () => {
+    const ids: string[] = [];
+    obras['POST /movimientos'] = (init) => {
+      const datos = cuerpo(init);
+      ids.push(datos.id);
+      return ids.length === 1
+        ? jsonRespuesta(503, { codigo: 'SERVICIO_NO_DISPONIBLE' }, 'application/problem+json')
+        : jsonRespuesta(200, {
+            id: datos.id, periodo: '2026-11', superaStock: false,
+            stock: { cantidad: 125, minimo: 100, estado: 'JUSTO' },
+          });
+    };
+    await abrir('/obras/o1/ingreso');
+    await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
+    await fireEvent.changeText(screen.getByLabelText('Cantidad'), '5');
+    await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
+    expect(await screen.findByText('Registrado', {}, { timeout: 5000 })).toBeTruthy();
+    expect(ids).toHaveLength(2);
+    expect(ids[1]).toBe(ids[0]);
+  });
+
+  it('tras un fallo, «Registrar» de nuevo repite el mismo registro (mismo id)', async () => {
+    const ids: string[] = [];
+    const registrar = obras['POST /movimientos']!;
+    obras['POST /movimientos'] = (init) => {
+      ids.push(cuerpo(init).id);
+      return jsonRespuesta(500, { codigo: 'ERROR_INTERNO' }, 'application/problem+json');
+    };
+    await abrir('/obras/o1/ingreso');
+    await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
+    await fireEvent.changeText(screen.getByLabelText('Cantidad'), '5');
+    await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
+    expect(
+      await screen.findByText('Ocurrió un error inesperado. Intenta de nuevo; si se repite, avisa a soporte.'),
+    ).toBeTruthy();
+
+    obras['POST /movimientos'] = (init) => {
+      ids.push(cuerpo(init).id);
+      return registrar(init);
+    };
+    await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
+    expect(await screen.findByText('Registrado')).toBeTruthy();
+    expect(ids).toEqual([ids[0], ids[0]]);
+
+    // El siguiente registro lleva otro id.
+    await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
+    await fireEvent.changeText(screen.getByLabelText('Cantidad'), '2');
+    await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
+    await waitFor(() => expect(ids).toHaveLength(3));
+    expect(ids[2]).not.toBe(ids[0]);
   });
 });
