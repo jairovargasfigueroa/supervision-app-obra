@@ -1,9 +1,14 @@
 import { useFonts } from 'expo-font';
-import { DefaultTheme, Stack, ThemeProvider, type Theme } from 'expo-router';
+import { DefaultTheme, SplashScreen, Stack, ThemeProvider, type Theme } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { PaperProvider } from 'react-native-paper';
 
+import { SesionProvider, useSesion } from '../sesion/sesion';
 import { colores, fuentesInter, tema, temaSistema } from '../tema';
+
+// La pantalla de bienvenida queda hasta que cargan la fuente y la sesión guardada.
+void SplashScreen.preventAutoHideAsync().catch(() => {});
 
 // Colores de la navegación (pestañas y fondo de las pantallas) iguales a los del tema de Paper.
 const temaNavegacion: Theme = {
@@ -20,6 +25,32 @@ const temaNavegacion: Theme = {
   },
 };
 
+/** Sin sesión solo se llega al inicio de sesión; con sesión, a las pestañas. */
+function Navegacion() {
+  const { sesion } = useSesion();
+
+  useEffect(() => {
+    if (sesion.estado !== 'cargando') {
+      SplashScreen.hide();
+    }
+  }, [sesion.estado]);
+
+  if (sesion.estado === 'cargando') {
+    return null;
+  }
+  const activa = sesion.estado === 'activa';
+  return (
+    <Stack screenOptions={{ headerShown: false }}>
+      <Stack.Protected guard={activa}>
+        <Stack.Screen name="(app)" />
+      </Stack.Protected>
+      <Stack.Protected guard={!activa}>
+        <Stack.Screen name="(auth)/iniciar-sesion" />
+      </Stack.Protected>
+    </Stack>
+  );
+}
+
 export default function RaizLayout() {
   const [interCargada, errorFuente] = useFonts(fuentesInter);
 
@@ -32,7 +63,9 @@ export default function RaizLayout() {
     <PaperProvider theme={interCargada ? tema : temaSistema}>
       <ThemeProvider value={temaNavegacion}>
         <StatusBar style="light" />
-        <Stack screenOptions={{ headerShown: false }} />
+        <SesionProvider>
+          <Navegacion />
+        </SesionProvider>
       </ThemeProvider>
     </PaperProvider>
   );

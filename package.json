@@ -17,10 +17,12 @@
     "expo-status-bar": "~58.0.4",
     "expo-web-browser": "~58.0.7",
     "react": "19.3.0",
+    "react-dom": "19.3.0",
     "react-native": "0.88.0",
     "react-native-paper": "^5.15.3",
     "react-native-safe-area-context": "~5.10.1",
-    "react-native-screens": "~4.30.0"
+    "react-native-screens": "~4.30.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@testing-library/react-native": "^14.1.0",
@@ -42,9 +44,9 @@
   "private": true,
   "jest": {
     "preset": "jest-expo",
-    "setupFiles": [
+    "testTimeout": 60000,
+    "setupFilesAfterEnv": [
       "<rootDir>/jest.setup.ts"
-    ],
-    "testTimeout": 60000
+    ]
   }
 }

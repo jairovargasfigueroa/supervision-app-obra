@@ -4,7 +4,7 @@ Obligatorio para todo el código de este proyecto. Instala todo con `npx expo in
 
 ## Librerías
 
-Expo SDK 58, `expo-router`, `react-native-paper` 5 + `react-native-safe-area-context` + `@expo/vector-icons` (MaterialCommunityIcons), `expo-font` + `expo-asset` (lo pide `expo-font`) + `@expo-google-fonts/inter`, `@tanstack/react-query` 5, `@tanstack/react-form` 1 + `zod` 4, `expo-auth-session`, `expo-secure-store`, `expo-crypto`, `expo-image-picker`, `expo-image-manipulator`, `expo-sqlite` (capa 1). Pruebas: `jest-expo` + `@testing-library/react-native` 14.
+Expo SDK 58, `expo-router`, `react-native-paper` 5 + `react-native-safe-area-context` + `@expo/vector-icons` (MaterialCommunityIcons), `expo-font` + `expo-asset` (lo pide `expo-font`) + `@expo-google-fonts/inter`, `@tanstack/react-query` 5, `@tanstack/react-form` 1 + `zod` 4, `expo-auth-session`, `expo-secure-store`, `expo-crypto`, `expo-image-picker`, `expo-image-manipulator`, `expo-sqlite` (capa 1). Expo Router necesita además `expo-linking`, `expo-constants`, `react-native-screens`, `expo-web-browser` (lo usa `expo-auth-session`) y `react-dom` (dependencia de `@expo/metro-runtime`; fijada en `19.3.0`, la del SDK, porque si npm la elige sola toma una que pide otro React y `npm install` falla con `ERESOLVE`). Pruebas: `jest-expo` + `@testing-library/react-native` 14.
 
 ## Tema
 
@@ -29,14 +29,24 @@ src/
     (app)/obras/[id]/ingreso.tsx     # almacenero
     (app)/obras/[id]/salida.tsx      # almacenero
     (app)/obras/[id]/stock.tsx       # almacenero
-  sesion/          sesion.tsx (contexto), keycloak.ts (expo-auth-session), tokens.ts (secure-store)
+  sesion/          sesion.tsx (contexto: SesionProvider, useSesion), keycloak.ts (expo-auth-session),
+                   tokens.ts (secure-store), token.ts (lee el JWT), renovacion.ts (cuándo renovar)
   api/             cliente.ts (fetch con token, reintentos 1-2-4 s), obras.ts, materiales.ts (funciones + queryOptions)
   formularios/     movimiento.esquema.ts, foto.esquema.ts (Zod)
   componentes/     EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx, SelectorMaterial.tsx, SelectorPartida.tsx
   sync/            (capa 1) cola.ts, base-local.ts
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod)
+  pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts
   tema.ts
 ```
+
+## Sesión (001)
+
+- `keycloak.ts`: descubrimiento del realm (`emisor` de `configuracion.ts`), `AuthRequest` con PKCE `S256` y alcances `openid profile`, canje del código (`exchangeCodeAsync` con `code_verifier`) y renovación (`refreshAsync`). El `redirectUri` es `makeRedirectUri({ scheme: 'appobra', path: 'iniciar-sesion' })`: `exp://localhost:8090/--/iniciar-sesion` en Expo Go y `appobra://iniciar-sesion` en un *development build*. Lleva ruta porque Keycloak rechaza `appobra://` sola (URI sin autoridad, `400`).
+- `tokens.ts`: token de acceso, refresh token y vencimiento en `expo-secure-store`, cada uno en su clave.
+- `sesion.tsx`: al abrir la app lee los tokens guardados y los renueva si vencieron; renueva solo un minuto antes de que venza el token de acceso (dura 5 minutos) y `obtenerToken()` lo renueva si hace falta (una sola renovación a la vez). Si Keycloak rechaza la renovación (error OAuth, p. ej. `invalid_grant`), borra los tokens y vuelve al inicio de sesión con «Tu sesión terminó. Vuelve a iniciar sesión.»; si falla la red, conserva la sesión y reintenta a los 30 s.
+- Al abrir la app sin sesión, el inicio de sesión de Keycloak se abre solo una vez (criterio 1); después de cerrar sesión o de una sesión vencida se espera a que el usuario pulse «Iniciar sesión».
+- `src/app/_layout.tsx` usa `Stack.Protected`: sin sesión solo existe `(auth)/iniciar-sesion`; con sesión, `(app)`.
 
 ## Reglas
 
@@ -52,5 +62,5 @@ src/
 - Las pruebas van junto al archivo que prueban (`formato.test.ts`, `estados.test.tsx`).
 - Las rutas (`src/app/`) se prueban desde fuera de esa carpeta, en `src/rutas.test.tsx`, con `renderRouter('src/app')` de `expo-router/testing-library`: todo archivo dentro de `src/app/` es una pantalla, así que ahí no van pruebas.
 - `testTimeout` de Jest en 60 s (`package.json`): la primera prueba que monta Expo Router tarda en cargar los módulos.
-- `jest.setup.ts` simula `expo-font` (fuentes e íconos dados por cargados), porque en Jest no hay archivos de fuentes reales.
+- `jest.setup.ts` (en `setupFilesAfterEnv`) simula `expo-secure-store` en memoria (`src/pruebas/secure-store-simulado.ts`, se vacía antes de cada prueba) y `expo-font` (fuentes e íconos dados por cargados), porque en Jest no hay archivos de fuentes reales.
 - Compilación sin celular: `npx expo export --platform android`.
