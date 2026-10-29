@@ -27,7 +27,15 @@
       "expo-asset",
       "expo-router",
       "expo-secure-store",
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "La app usa tus fotos para registrar el avance de la obra.",
+          "cameraPermission": "La app usa la cámara para tomar fotos del avance de la obra.",
+          "microphonePermission": false
+        }
+      ]
     ],
     "extra": {
       "keycloakUrl": "http://localhost:8080",
