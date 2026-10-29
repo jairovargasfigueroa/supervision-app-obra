@@ -62,3 +62,69 @@ describe('inicio de sesión', () => {
     await expect(leerTokens()).resolves.toBeNull();
   });
 });
+
+const entrarCon = async (roles: string[], nombre = 'Juan Pérez') => {
+  await guardarTokens(sesionDe(roles, nombre));
+  await abrirApp();
+};
+
+const pestanasVisibles = () =>
+  ['Mis obras', 'Foto de avance', 'Ingreso', 'Salida', 'Stock'].filter(
+    (titulo) => screen.queryAllByText(titulo).length > 0,
+  );
+
+describe('pestañas según el rol (criterio 5) y barra superior (criterio 11)', () => {
+  it('maestro → Mis obras y Foto de avance, con su nombre y rol arriba', async () => {
+    await entrarCon(['maestro'], 'Freddy Choque Mamani');
+    expect(await screen.findByText('Freddy Choque Mamani')).toBeTruthy();
+    expect(screen.getByText('Maestro de obra')).toBeTruthy();
+    expect(pestanasVisibles()).toEqual(['Mis obras', 'Foto de avance']);
+  });
+
+  it('almacenero → Mis obras, Ingreso, Salida y Stock', async () => {
+    await entrarCon(['almacenero'], 'Rosa Flores');
+    expect(await screen.findByText('Rosa Flores')).toBeTruthy();
+    expect(screen.getByText('Almacenero')).toBeTruthy();
+    expect(pestanasVisibles()).toEqual(['Mis obras', 'Ingreso', 'Salida', 'Stock']);
+  });
+
+  it('con los dos roles → la unión, con «Mis obras» una sola vez', async () => {
+    await entrarCon(['maestro', 'almacenero']);
+    expect(await screen.findByText('Maestro de obra · Almacenero')).toBeTruthy();
+    expect(pestanasVisibles()).toEqual(['Mis obras', 'Foto de avance', 'Ingreso', 'Salida', 'Stock']);
+    expect(screen.getAllByText('Mis obras')).toHaveLength(1);
+  });
+
+  it('cada pestaña muestra por ahora su estado vacío', async () => {
+    await entrarCon(['almacenero']);
+    await fireEvent.press(await screen.findByText('Stock'));
+    expect(screen).toHavePathname('/stock');
+    expect(screen.getByText('Aún no hay obras asignadas.')).toBeTruthy();
+  });
+
+  it('un maestro no llega a las pantallas del almacenero', async () => {
+    await guardarTokens(sesionDe(['maestro']));
+    await renderRouter('src/app', { initialUrl: '/ingreso' });
+    await screen.findByText('Foto de avance');
+    expect(screen).not.toHavePathname('/ingreso');
+  });
+});
+
+describe('sin rol de la app (criterio 3)', () => {
+  it('muestra «No tienes acceso a esta aplicación» con su nombre y «Cerrar sesión»', async () => {
+    await entrarCon(['residente', 'cliente'], 'Demo Uno');
+    expect(await screen.findByText('No tienes acceso a esta aplicación')).toBeTruthy();
+    expect(screen.getByText('Demo Uno, tu cuenta no tiene un rol de la app de obra.')).toBeTruthy();
+    expect(screen.getByText('Cerrar sesión')).toBeTruthy();
+    expect(screen).toHavePathname('/sin-acceso');
+    expect(pestanasVisibles()).toEqual([]);
+  });
+
+  it('«Cerrar sesión» borra los tokens y vuelve al inicio de sesión', async () => {
+    await entrarCon(['cliente']);
+    await fireEvent.press(await screen.findByText('Cerrar sesión'));
+    expect(await screen.findByText('Iniciar sesión')).toBeTruthy();
+    expect(screen).toHavePathname('/iniciar-sesion');
+    await expect(leerTokens()).resolves.toBeNull();
+  });
+});

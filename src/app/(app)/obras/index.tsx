@@ -1,16 +1,6 @@
-import { StyleSheet, View } from 'react-native';
+import { PantallaVacia } from '../../../componentes/PantallaVacia';
 
-import { EstadoVacio } from '../../../componentes/EstadoVacio';
-
-// Mis obras: la lista real llega con la 004 y la 005.
+// Mis obras (maestro y almacenero): la lista real llega con la 004 y la 005.
 export default function MisObras() {
-  return (
-    <View style={estilos.contenido}>
-      <EstadoVacio icono="office-building-outline" mensaje="Aún no hay obras asignadas." />
-    </View>
-  );
+  return <PantallaVacia icono="office-building-outline" />;
 }
-
-const estilos = StyleSheet.create({
-  contenido: { flex: 1, justifyContent: 'center', padding: 16 },
-});

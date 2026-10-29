@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import { useEffect } from 'react';
 import { PaperProvider } from 'react-native-paper';
 
+import { tieneAccesoApp } from '../sesion/roles';
 import { SesionProvider, useSesion } from '../sesion/sesion';
 import { colores, fuentesInter, tema, temaSistema } from '../tema';
 
@@ -25,7 +26,10 @@ const temaNavegacion: Theme = {
   },
 };
 
-/** Sin sesión solo se llega al inicio de sesión; con sesión, a las pestañas. */
+/**
+ * Sin sesión solo se llega al inicio de sesión; con sesión y un rol de la app, a las pestañas; con
+ * sesión pero sin `maestro` ni `almacenero`, solo a «No tienes acceso» (criterio 3).
+ */
 function Navegacion() {
   const { sesion } = useSesion();
 
@@ -39,10 +43,14 @@ function Navegacion() {
     return null;
   }
   const activa = sesion.estado === 'activa';
+  const conAcceso = activa && tieneAccesoApp(sesion.usuario.roles);
   return (
     <Stack screenOptions={{ headerShown: false }}>
-      <Stack.Protected guard={activa}>
+      <Stack.Protected guard={conAcceso}>
         <Stack.Screen name="(app)" />
+      </Stack.Protected>
+      <Stack.Protected guard={activa && !conAcceso}>
+        <Stack.Screen name="(auth)/sin-acceso" />
       </Stack.Protected>
       <Stack.Protected guard={!activa}>
         <Stack.Screen name="(auth)/iniciar-sesion" />

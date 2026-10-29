@@ -1,15 +1,14 @@
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { Tabs } from 'expo-router';
-import type { ComponentProps } from 'react';
 import type { ColorValue } from 'react-native';
 
 import { BarraSuperior } from '../../componentes/BarraSuperior';
+import { nombreRoles, PESTANAS, pestanasPorRol, type Pestana } from '../../sesion/roles';
+import { useSesion } from '../../sesion/sesion';
 import { useTema } from '../../tema';
 
-type NombreIcono = ComponentProps<typeof MaterialCommunityIcons>['name'];
-
 const iconoPestana =
-  (nombre: NombreIcono) =>
+  (nombre: Pestana['icono']) =>
   ({ color, size }: { color: ColorValue; size: number }) => (
     <MaterialCommunityIcons
       name={nombre}
@@ -18,20 +17,32 @@ const iconoPestana =
     />
   );
 
+// Pestañas según el rol (criterio 5) y barra superior con el nombre y el rol (criterio 11).
 export default function AppLayout() {
   const { colors } = useTema();
+  const { sesion } = useSesion();
+  const usuario = sesion.estado === 'activa' ? sesion.usuario : null;
+  const roles = usuario?.roles ?? [];
+  const visibles = new Set(pestanasPorRol(roles).map((pestana) => pestana.ruta));
+  const nombre = usuario?.nombre ?? '';
+  const rol = nombreRoles(roles);
+
   return (
     <Tabs
       screenOptions={{
-        header: () => <BarraSuperior titulo="Supervisión de obras" />,
+        header: () => <BarraSuperior nombre={nombre} rol={rol} />,
         tabBarActiveTintColor: colors.primary,
         tabBarInactiveTintColor: colors.textoSecundario,
       }}
     >
-      <Tabs.Screen
-        name="obras/index"
-        options={{ title: 'Mis obras', tabBarIcon: iconoPestana('office-building-outline') }}
-      />
+      {PESTANAS.map((pestana) => (
+        <Tabs.Protected key={pestana.ruta} guard={visibles.has(pestana.ruta)}>
+          <Tabs.Screen
+            name={pestana.ruta}
+            options={{ title: pestana.titulo, tabBarIcon: iconoPestana(pestana.icono) }}
+          />
+        </Tabs.Protected>
+      ))}
     </Tabs>
   );
 }
