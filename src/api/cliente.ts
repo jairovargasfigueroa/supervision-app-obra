@@ -162,12 +162,19 @@ export async function conReintentos<T>(
   }
 }
 
-export type Servicio = 'obras' | 'materiales';
+export type Servicio = 'obras' | 'materiales' | 'sincronizacion';
 
-/** URL de una ruta de un servicio, con la base de app.json → extra (`obrasUrl`, `materialesUrl`). */
+/**
+ * URL de una ruta de un servicio, con la base de app.json → extra (`obrasUrl`, `materialesUrl`,
+ * `sincronizacionUrl`).
+ */
 export function urlServicio(servicio: Servicio, ruta: string): string {
   const config = configuracion();
-  const base = servicio === 'obras' ? config.obrasUrl : config.materialesUrl;
+  const base = {
+    obras: config.obrasUrl,
+    materiales: config.materialesUrl,
+    sincronizacion: config.sincronizacionUrl,
+  }[servicio];
   return `${base.replace(/\/+$/, '')}${ruta}`;
 }
 

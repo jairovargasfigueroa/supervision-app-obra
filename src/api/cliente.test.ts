@@ -144,9 +144,10 @@ describe('reintentos de un registro (diseño 004)', () => {
 });
 
 describe('URLs de los servicios (app.json → extra)', () => {
-  it('Obras en obrasUrl y Materiales en materialesUrl', () => {
+  it('Obras en obrasUrl, Materiales en materialesUrl y Sincronización en sincronizacionUrl', () => {
     expect(urlServicio('obras', '/obras')).toBe('http://localhost:8081/obras');
     expect(urlServicio('materiales', '/movimientos')).toBe('http://localhost:8082/movimientos');
+    expect(urlServicio('sincronizacion', '/lotes')).toBe('http://localhost:8084/lotes');
   });
 });
 

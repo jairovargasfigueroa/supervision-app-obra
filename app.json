@@ -35,14 +35,16 @@
           "cameraPermission": "La app usa la cámara para tomar fotos del avance de la obra.",
           "microphonePermission": false
         }
-      ]
+      ],
+      "expo-sqlite"
     ],
     "extra": {
       "keycloakUrl": "http://localhost:8080",
       "realm": "supervision",
       "clientId": "app-obra",
       "obrasUrl": "http://localhost:8081",
-      "materialesUrl": "http://localhost:8082"
+      "materialesUrl": "http://localhost:8082",
+      "sincronizacionUrl": "http://localhost:8084"
     }
   }
 }
