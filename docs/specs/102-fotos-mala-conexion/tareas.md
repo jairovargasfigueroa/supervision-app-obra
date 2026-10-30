@@ -4,11 +4,8 @@ Requisitos y diseño: `docs/specs/102-fotos-mala-conexion/` de la carpeta que ag
 
 Marca cada tarea al terminarla (con sus pruebas y su commit).
 
-- [ ] Instalar `expo-file-system` con `npx expo install`; migración de la base local (columnas de archivo, partes y `depende_de`)
-- [ ] Foto de avance a la cola: segunda compresión si pasa de 1 MB, copia a `pendientes/`, huella SHA-256 y tamaño
-- [ ] Foto opcional de la nota de remisión en el ingreso (dos operaciones con `depende_de`)
-- [ ] Regla de «liviana lista» y rechazo en cascada cuando la dependencia es rechazada
-- [ ] `src/sync/subidor.ts`: creación o consulta de la subida, partes faltantes con tiempo máximo de 20 s, completar (30 s), reinicios, rechazos y `SUBIDA_DISTINTA` (nueva subida con otro `idSubida`, mismo `fotoId`)
+- [ ] Instalar `expo-file-system` con `npx expo install`; migración de la base local (`archivo_local`, `estado_archivo`)
+- [ ] Foto de avance a la cola: compresión a 1280 px y calidad 0,7, copia a `pendientes/`, aviso con más de 100 fotos sin enviar
+- [ ] `src/sync/subidor.ts`: URL de Sincronización (10 s), `PUT` a S3 (30 s), rechazos, reintentos con la espera creciente, `SUBIENDO` → `PENDIENTE` al iniciar
 - [ ] Enviador: livianos primero y un archivo a la vez; borrado del archivo local al confirmar o descartar
-- [ ] «Pendientes de envío»: miniatura y progreso «Subiendo foto · X de Y partes»
-- [ ] Pruebas de la spec
+- [ ] «Pendientes de envío»: miniatura y «Subiendo foto…»; pruebas de la spec
