@@ -1009,6 +1009,50 @@ describe('diario de obra (103)', () => {
     expect(screen.queryByLabelText(/^Corregir: /)).toBeNull();
   });
 
+  it('una sola entrada por día también con una sin enviar en el celular (criterio 4)', async () => {
+    obras['GET /paquete-datos'] = conDiario([]);
+    await entradaEnCola('d7', hoy(), 'Guardada sin señal hace un rato.');
+    await abrirDiario();
+    await screen.findByText('Guardada sin señal hace un rato.');
+    await fireEvent.press(screen.getByLabelText('Clima: Soleado'));
+    await fireEvent.changeText(screen.getByLabelText('Texto del diario'), 'Segunda entrada del mismo día.');
+    await fireEvent.press(screen.getByRole('button', { name: /Guardar entrada/ }));
+    expect(
+      await screen.findByText(`Ya registraste el diario del ${hoy().slice(8, 10)}/${hoy().slice(5, 7)}`),
+    ).toBeTruthy();
+    await expect(listar('id-usuario1')).resolves.toHaveLength(1);
+  });
+
+  it('con señal va como ENTRADA_DIARIO por Sincronización: «Registrado» (criterios 3 y 6)', async () => {
+    obras['GET /paquete-datos'] = conDiario([]);
+    const lotes: { tipo: string; idOperacion: string; datos: Record<string, unknown> }[] = [];
+    obras['POST /lotes'] = (init) => {
+      const { operaciones } = JSON.parse(String(init.body));
+      lotes.push(...operaciones);
+      return jsonRespuesta(200, {
+        resultados: operaciones.map((o: { idOperacion: string; datos: Record<string, unknown> }) => ({
+          idOperacion: o.idOperacion,
+          estado: 'PROCESADO',
+          status: 201,
+          respuesta: { ...o.datos, registradoPor: 'id-usuario1', registradoEn: '2026-11-15T23:10:00Z' },
+        })),
+      });
+    };
+    await abrirDiario();
+    await fireEvent.press(screen.getByLabelText('Clima: Soleado'));
+    await fireEvent.changeText(screen.getByLabelText('Texto del diario'), 'Se armó el encofrado de la losa.');
+    await fireEvent.press(screen.getByRole('button', { name: /Guardar entrada/ }));
+    expect(await screen.findByText('Registrado')).toBeTruthy();
+    expect(lotes).toEqual([
+      {
+        idOperacion: expect.any(String),
+        tipo: 'ENTRADA_DIARIO',
+        creadaEn: expect.any(String),
+        datos: { id: lotes[0]!.idOperacion, obraId: 'o1', fecha: hoy(), clima: 'SOLEADO', texto: 'Se armó el encofrado de la losa.' },
+      },
+    ]);
+  });
+
   it('el almacenero no llega al diario', async () => {
     await guardarTokens(sesionDe(['almacenero']));
     await renderRouter('src/app', { initialUrl: '/obras/o1/diario' });

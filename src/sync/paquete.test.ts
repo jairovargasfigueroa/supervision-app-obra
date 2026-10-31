@@ -125,6 +125,23 @@ describe('paquete de datos', () => {
     await expect(leerPaquete('u1')).resolves.toBeNull();
   });
 
+  it('guarda el diario de cada obra que trae el paquete del maestro (103)', async () => {
+    const conDiario = paquete('v1');
+    conDiario.obras[0]!.diario = [{ id: 'd1', fecha: '2026-11-15', clima: 'LLUVIA_LEVE', texto: 'Se vació la losa.' }];
+    simularFetch().mockResolvedValueOnce(jsonRespuesta(200, conDiario));
+    await descargarPaquete({ obtenerToken, usuarioId: 'u1' });
+    expect((await leerPaquete('u1'))?.contenido.obras[0]?.diario).toEqual(conDiario.obras[0]!.diario);
+  });
+
+  it('un clima que no es de los cuatro no es la respuesta del contrato', async () => {
+    const malo = paquete('v1');
+    malo.obras[0]!.diario = [{ id: 'd1', fecha: '2026-11-15', clima: 'GRANIZO' as 'SOLEADO', texto: 'x' }];
+    simularFetch().mockResolvedValueOnce(jsonRespuesta(200, malo));
+    await expect(descargarPaquete({ obtenerToken, usuarioId: 'u1' })).rejects.toMatchObject({
+      fallo: { tipo: 'respuesta-invalida' },
+    });
+  });
+
   it('cada usuario tiene su paquete', async () => {
     simularFetch().mockResolvedValueOnce(jsonRespuesta(200, paquete('v1')));
     await descargarPaquete({ obtenerToken, usuarioId: 'u1' });

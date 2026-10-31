@@ -10,6 +10,7 @@
 | Registrar salida de material (material, cantidad, partida) | Almacenero | Registrar salida de material | Base |
 | Stock de la obra | Almacenero | — | Base |
 | Pendientes de envío | Maestro, almacenero | Sincronización | Capa 1 |
+| Diario de obra (fecha, clima y texto del día; últimos 30 días) | Maestro | Registrar entrada del diario | Capa 1 |
 | Aviso de casco y chaleco en la foto | Maestro | IA en el dispositivo | Capa 3 |
 
 El menú muestra solo las opciones del rol del usuario.
