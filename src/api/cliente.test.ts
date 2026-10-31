@@ -48,6 +48,20 @@ describe('pedir', () => {
     });
   });
 
+  it('agrega los encabezados propios del servicio y acepta 304 sin cambios', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 304 }));
+    const respuesta = await pedir('http://sync/x', {
+      obtenerToken: token,
+      encabezados: { 'X-Dispositivo-Id': 'd-1', 'If-None-Match': '"v1"' },
+    });
+    expect(respuesta).toEqual({ estado: 304, datos: undefined });
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
+      Authorization: 'Bearer token-1',
+      'X-Dispositivo-Id': 'd-1',
+      'If-None-Match': '"v1"',
+    });
+  });
+
   it('un error trae el codigo del Problem Details', async () => {
     fetchMock.mockResolvedValue(
       jsonRespuesta(422, { status: 422, codigo: 'PARTIDA_NO_ES_DE_LA_OBRA' }, 'application/problem+json'),

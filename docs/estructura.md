@@ -43,7 +43,8 @@ src/
   api/             red.ts (única llamada a fetch), cliente.ts (token, tiempo máximo, X-Request-Id, errores por
                    codigo, URL de cada servicio, validación Zod de la respuesta; QueryClient con reintentos
                    1-2-4 s de las consultas y conReintentos para repetir un registro con su id), errores.ts (ErrorApi y textos de docs/mensajes.md),
-                   obras.ts, materiales.ts (funciones + queryOptions), subida.ts (lee la foto y hace el PUT a S3)
+                   obras.ts, materiales.ts (funciones + queryOptions), subida.ts (lee la foto y hace el PUT a S3),
+                   sincronizacion.ts (101: GET /paquete-datos con X-Dispositivo-Id e If-None-Match, `null` con 304)
   formularios/     movimiento.esquema.ts (campos y cuerpo de POST /movimientos, Zod), movimiento.ts (qué registro
                    se envía y con qué id, avisos de stock superado y periodo cerrado), useMovimiento.ts (TanStack
                    Form + envío), foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
@@ -54,7 +55,8 @@ src/
                    SelectorMaterial.tsx (con búsqueda), SelectorPartida.tsx
   sync/            (capa 1, 101) dispositivo.ts (idDispositivo: UUID creado una vez y guardado en secure-store),
                    base-local.ts (expo-sqlite: tablas operacion_pendiente y paquete_datos, migraciones por
-                   PRAGMA user_version en una transacción, una sola conexión), cola.ts
+                   PRAGMA user_version en una transacción, una sola conexión), paquete.ts (descarga del
+                   paquete de datos con la versión guardada, guardado por usuario y lectura), cola.ts
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
                    estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),

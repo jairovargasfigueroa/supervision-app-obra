@@ -50,16 +50,19 @@ type Opciones = {
   obtenerToken: ObtenerToken;
   metodo?: 'GET' | 'POST' | 'PUT';
   cuerpo?: unknown;
+  /** Encabezados propios del servicio (p. ej. `X-Dispositivo-Id` e `If-None-Match` de Sincronización). */
+  encabezados?: Record<string, string>;
 };
 
 /**
  * Llama a un servicio con el token de la sesión. Devuelve el estado (p. ej. para distinguir
  * `201` de `200` en un registro repetido) y el cuerpo JSON; si el servicio responde un error,
- * lanza `ErrorApi` con su `codigo` (o el genérico del estado si no trae uno).
+ * lanza `ErrorApi` con su `codigo` (o el genérico del estado si no trae uno). `304` (sin cambios,
+ * con `If-None-Match`) no es un error: vuelve con `datos` vacío.
  */
 export async function pedir<T = unknown>(
   url: string,
-  { obtenerToken, metodo = 'GET', cuerpo }: Opciones,
+  { obtenerToken, metodo = 'GET', cuerpo, encabezados }: Opciones,
 ): Promise<Respuesta<T>> {
   let token: string | null;
   try {
@@ -79,13 +82,14 @@ export async function pedir<T = unknown>(
       Accept: 'application/json',
       Authorization: `Bearer ${token}`,
       'X-Request-Id': requestId,
+      ...encabezados,
       ...(cuerpo === undefined ? {} : { 'Content-Type': 'application/json' }),
     },
     body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
   });
 
   const datos = await leerJson(respuesta);
-  if (!respuesta.ok) {
+  if (!respuesta.ok && respuesta.status !== 304) {
     const codigo =
       typeof datos === 'object' && datos !== null && 'codigo' in datos && typeof datos.codigo === 'string'
         ? datos.codigo
