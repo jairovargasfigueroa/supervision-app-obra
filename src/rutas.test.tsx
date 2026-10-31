@@ -844,6 +844,34 @@ describe('pendientes de envío (101, criterios 16 y 17)', () => {
     expect(nuevas[0].datos.registradoEn).not.toBe('2026-10-31T14:00:00Z');
   });
 
+  it('una foto muestra su miniatura y, mientras sube, «Subiendo foto…» (102, criterio 7)', async () => {
+    escribirArchivo('file:///documento/pendientes/f1.jpg');
+    await agregar({
+      idOperacion: 'f1',
+      usuarioId: 'id-usuario1',
+      usuarioNombre: 'Juan Pérez',
+      tipo: 'FOTO_AVANCE',
+      obraId: 'o1',
+      datos: { id: 'f1', obraId: 'o1', partidaId: 'p1', tomadaEn: '2026-11-15T14:00:00Z' },
+      descripcion: 'Foto de avance · P-01 · Losa de hormigón armado',
+      archivoLocal: 'file:///documento/pendientes/f1.jpg',
+    });
+    obras['POST /lotes'] = procesarLote;
+    // La subida queda en curso hasta que Sincronización contesta la URL.
+    let contestar: (r: Response) => void = () => {};
+    obras['POST /fotos/url-subida'] = () =>
+      new Promise<Response>((listo) => {
+        contestar = listo;
+      });
+    await abrirPendientes();
+    expect(await screen.findByText('Foto de avance · P-01 · Losa de hormigón armado')).toBeTruthy();
+    expect(screen.getByTestId('miniatura-foto').props.source).toEqual({ uri: 'file:///documento/pendientes/f1.jpg' });
+    expect(await screen.findByText('Subiendo foto…')).toBeTruthy();
+
+    contestar(jsonRespuesta(503, { codigo: 'SERVICIO_NO_DISPONIBLE' }, 'application/problem+json'));
+    await waitFor(() => expect(screen.queryByText('Subiendo foto…')).toBeNull());
+  });
+
   it('«Enviar ahora» envía los pendientes sin esperar su próximo intento', async () => {
     await abrirPendientes();
     // Al abrir la app el envío falló (Sincronización no respondía): quedaron esperando su próximo intento.

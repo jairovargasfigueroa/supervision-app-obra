@@ -38,6 +38,9 @@ export function descripcionFoto(partida?: { codigo: string; nombre: string } | n
   return partida ? `Foto de avance · ${partida.codigo} · ${partida.nombre}` : 'Foto de avance';
 }
 
+/** Foto subiéndose a S3 en «Pendientes de envío» (102, criterio 7). */
+export const MENSAJE_SUBIENDO_FOTO = 'Subiendo foto…';
+
 /** Con más de estas fotos sin enviar en el celular se avisa (102, criterio 3). */
 export const FOTOS_SIN_ENVIAR_PARA_AVISAR = 100;
 

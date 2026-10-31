@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { SectionList, StyleSheet, View } from 'react-native';
+import { Image, SectionList, StyleSheet, View } from 'react-native';
 import { Button, Card, Dialog, Portal, Snackbar, Surface, Text } from 'react-native-paper';
 
 import { mensajeDeError, MENSAJE_SIN_CONEXION } from '../api/errores';
@@ -11,6 +11,7 @@ import {
   MENSAJE_CONFIRMAR_DESCARTE,
   MENSAJE_GUARDADO_EN_CELULAR,
   MENSAJE_SIN_PENDIENTES,
+  MENSAJE_SUBIENDO_FOTO,
   mensajePendientesDeOtro,
   mensajeRechazo,
   sePuedeRegistrarHoy,
@@ -197,11 +198,25 @@ function TarjetaOperacion({ op, onDescartar, onRegistrarHoy }: PropsTarjeta) {
     <Card mode="outlined" style={estilos.tarjeta} accessibilityLabel={op.descripcion}>
       <Card.Content style={estilos.contenido}>
         <View style={estilos.fila}>
+          {/* 102, criterio 7: miniatura de la foto guardada en el celular (se borra al confirmarse). */}
+          {op.archivoLocal && op.estado !== 'ENVIADO' ? (
+            <Image
+              source={{ uri: op.archivoLocal }}
+              style={estilos.miniatura}
+              accessibilityLabel="Miniatura de la foto"
+              testID="miniatura-foto"
+            />
+          ) : null}
           <Text variant="titleMedium" style={[estilos.descripcion, { color: colors.onSurface }]}>
             {op.descripcion}
           </Text>
           <EstadoChip etiqueta={ETIQUETA_ESTADO[op.estado]} tono={TONO[op.estado]} />
         </View>
+        {op.estadoArchivo === 'SUBIENDO' ? (
+          <Text variant="bodyMedium" style={{ color: colors.atencion }} testID="subiendo-foto">
+            {MENSAJE_SUBIENDO_FOTO}
+          </Text>
+        ) : null}
         <Text variant="bodySmall" style={{ color: colors.textoSecundario }}>
           Registrado el {formatearFechaHora(op.creadaEn)}
         </Text>
@@ -251,6 +266,7 @@ const estilos = StyleSheet.create({
   contenido: { gap: 4 },
   fila: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   descripcion: { flex: 1 },
+  miniatura: { width: 56, height: 56, borderRadius: radios.control },
   aviso: { borderRadius: radios.tarjeta, padding: 12 },
   acciones: { flexWrap: 'wrap', justifyContent: 'flex-start', rowGap: 8 },
 });
