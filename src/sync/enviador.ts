@@ -11,9 +11,11 @@ import {
   tomarParaEnvio,
   type Operacion,
 } from './cola';
+import { borrarArchivo } from './archivos';
 import { idDispositivo } from './dispositivo';
 import { esperaCreciente } from './espera';
 import { actualizarStockLocal, descargarPaquete } from './paquete';
+import { subirSiguiente } from './subidor';
 
 export { ESPERA_MAXIMA_S, esperaCreciente } from './espera';
 
@@ -94,6 +96,8 @@ async function aplicarResultado(
 ): Promise<'enviada' | 'rechazada' | 'reintento'> {
   if (resultado?.estado === 'PROCESADO') {
     await marcarEnviada(op.idOperacion, resultado.respuesta, ahora());
+    // 102, criterio 10: el archivo se borra del celular cuando el servidor confirmó el registro.
+    borrarArchivo(op.archivoLocal);
     const stock = op.tipo === 'MOVIMIENTO_MATERIAL' ? stockDe(resultado.respuesta) : null;
     const materialId = op.datos.materialId;
     if (stock && typeof materialId === 'string') {
@@ -147,10 +151,31 @@ async function enviarTodo({
     }
     renovar = false;
 
-    // 2. Hasta 20 listas, en orden, marcadas ENVIANDO.
+    // 2. Hasta 20 livianas listas, en orden, marcadas ENVIANDO (sin archivo o con el archivo ya subido).
     const lote = await tomarParaEnvio(usuarioId, ahora());
     if (lote.length === 0) {
-      break;
+      // 102: sin livianas listas, se sube un archivo (uno a la vez) y se vuelve a mirar las livianas:
+      // así un movimiento nuevo no espera detrás de varias fotos.
+      const subida = await subirSiguiente({ usuarioId, token, idDispositivo: dispositivo, ahora, azar });
+      if (subida.tipo === 'nada') {
+        break;
+      }
+      if (subida.tipo === 'rechazado') {
+        resumen.rechazadas++;
+        continue;
+      }
+      if (subida.tipo === 'reintento') {
+        resumen.reintentos++;
+        if (subida.renovar && !renovadoPor401) {
+          // Sincronización no aceptó el token: se renueva y se sigue (el archivo espera su próximo intento).
+          renovar = true;
+          renovadoPor401 = true;
+          continue;
+        }
+        // El subidor se detiene hasta el próximo envío.
+        break;
+      }
+      continue;
     }
 
     // 3. POST /lotes con el token obtenido (tiempo máximo de 30 s).

@@ -1,6 +1,7 @@
 import type { PaqueteDatos, ResultadoLote } from '../api/sincronizacion';
 import { jsonRespuesta, simularFetch } from '../pruebas/fetch-simulado';
-import { agregar, listar, obtener, type NuevaOperacion } from './cola';
+import { archivosSimulados, escribirArchivo } from '../pruebas/archivos-simulados';
+import { agregar, descartar, listar, obtener, type NuevaOperacion } from './cola';
 import { idDispositivo } from './dispositivo';
 import { enviarPendientes, esperaCreciente } from './enviador';
 import { guardarPaquete, leerPaquete } from './paquete';
@@ -330,5 +331,122 @@ describe('enviarPendientes', () => {
 
     await expect(primero).resolves.toMatchObject({ enviadas: 2 });
     expect(lotes.map((l) => l.operaciones.map((o) => o.idOperacion))).toEqual([['a'], ['b']]);
+  });
+});
+
+describe('enviarPendientes con fotos (102)', () => {
+  const archivoDe = (id: string) => `file:///documento/pendientes/${id}.jpg`;
+
+  async function foto(id: string, creada: number) {
+    escribirArchivo(archivoDe(id));
+    await agregar(
+      {
+        idOperacion: id,
+        usuarioId: 'u1',
+        usuarioNombre: 'Ana',
+        tipo: 'FOTO_AVANCE',
+        obraId: 'obra-1',
+        datos: { id, obraId: 'obra-1', partidaId: 'p-1', tomadaEn: T0.toISOString() },
+        descripcion: 'Foto de avance · P-01',
+        archivoLocal: archivoDe(id),
+      },
+      new Date(T0.getTime() - 60_000 + creada),
+    );
+  }
+
+  /** Sincronización y S3 simulados; `pasos` registra el orden de lo que pide la app. */
+  function simularConFotos({
+    put = () => new Response(null, { status: 200 }),
+    lote = todoProcesado,
+  }: { put?: () => Response; lote?: (l: Lote) => Response } = {}) {
+    const pasos: string[] = [];
+    const lotes: Lote[] = [];
+    simularFetch().mockImplementation(async (url: string, init: RequestInit = {}) => {
+      if (url.endsWith('/lotes')) {
+        const l = JSON.parse(String(init.body)) as Lote;
+        lotes.push(l);
+        pasos.push(`lote ${l.operaciones.map((o) => o.idOperacion).join(',')}`);
+        return lote(l);
+      }
+      if (url.endsWith('/fotos/url-subida')) {
+        const { fotoId } = JSON.parse(String(init.body)) as { fotoId: string };
+        pasos.push(`url ${fotoId}`);
+        return jsonRespuesta(201, {
+          url: `https://s3.test/${fotoId}`,
+          claveArchivo: `fotos/obra-1/${fotoId}.jpg`,
+          expiraEn: '2026-11-15T14:10:00Z',
+        });
+      }
+      if (init.method === 'PUT') {
+        pasos.push(`put ${url.replace('https://s3.test/', '')}`);
+        return put();
+      }
+      if (url.includes('/paquete-datos')) {
+        return new Response(null, { status: 304 });
+      }
+      throw new TypeError('Network request failed');
+    });
+    return { pasos, lotes };
+  }
+
+  it('primero los livianos, después los archivos de a uno, y cada registro de foto apenas se sube (criterio 4)', async () => {
+    await foto('f1', 1);
+    await foto('f2', 2);
+    await agregar(...nueva('m1', 'u1', 3));
+    const { pasos, lotes } = simularConFotos();
+
+    await expect(enviar()).resolves.toEqual({ enviadas: 3, rechazadas: 0, reintentos: 0 });
+
+    expect(pasos).toEqual(['lote m1', 'url f1', 'put f1', 'lote f1', 'url f2', 'put f2', 'lote f2']);
+    expect(lotes[1].operaciones[0]).toMatchObject({
+      idOperacion: 'f1',
+      tipo: 'FOTO_AVANCE',
+      datos: { id: 'f1', obraId: 'obra-1', partidaId: 'p-1', claveArchivo: 'fotos/obra-1/f1.jpg' },
+    });
+    // Confirmado el registro, el archivo se borra del celular (criterio 10).
+    expect(archivosSimulados()).toEqual([]);
+    expect(await obtener('f1')).toMatchObject({ estado: 'ENVIADO', estadoArchivo: 'SUBIDO' });
+  });
+
+  it('si falla la subida, los livianos ya salieron y la foto espera su próximo intento', async () => {
+    await foto('f1', 1);
+    await agregar(...nueva('m1', 'u1', 2));
+    const { pasos } = simularConFotos({ put: () => new Response(null, { status: 500 }) });
+
+    await expect(enviar()).resolves.toEqual({ enviadas: 1, rechazadas: 0, reintentos: 1 });
+    expect(pasos).toEqual(['lote m1', 'url f1', 'put f1']);
+    expect(await obtener('f1')).toMatchObject({ estado: 'PENDIENTE', estadoArchivo: 'PENDIENTE', intentos: 1 });
+    expect(archivosSimulados()).toEqual([archivoDe('f1')]);
+  });
+
+  it('el archivo se borra solo al confirmarse: si el lote falla queda en el celular, ya subido', async () => {
+    await foto('f1', 1);
+    simularConFotos({ lote: () => jsonRespuesta(503, problema(503, 'SERVICIO_NO_DISPONIBLE')) });
+
+    await enviar();
+    expect(await obtener('f1')).toMatchObject({ estado: 'PENDIENTE', estadoArchivo: 'SUBIDO' });
+    expect(archivosSimulados()).toEqual([archivoDe('f1')]);
+  });
+
+  it('una foto que Obras rechaza queda «Rechazada» con el archivo hasta descartarla (criterios 9 y 10)', async () => {
+    await foto('f1', 1);
+    simularConFotos({
+      lote: (l) =>
+        jsonRespuesta(200, {
+          resultados: l.operaciones.map((o) => ({
+            idOperacion: o.idOperacion,
+            estado: 'ERROR',
+            status: 422,
+            respuesta: problema(422, 'PARTIDA_NO_ES_DE_LA_OBRA'),
+          })),
+        }),
+    });
+
+    await expect(enviar()).resolves.toMatchObject({ rechazadas: 1 });
+    expect(await obtener('f1')).toMatchObject({ estado: 'RECHAZADO', errorCodigo: 'PARTIDA_NO_ES_DE_LA_OBRA' });
+    expect(archivosSimulados()).toEqual([archivoDe('f1')]);
+
+    await expect(descartar('f1')).resolves.toBe(true);
+    expect(archivosSimulados()).toEqual([]);
   });
 });

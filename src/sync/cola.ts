@@ -1,6 +1,7 @@
 // Cola local de operaciones por enviar a Sincronización (101, «Base local» y «Módulo src/sync/»).
 // Todo registro se guarda aquí primero, con su UUID, y sale en el orden en que se registró.
 // Las fechas se guardan en ISO 8601 UTC (`toISOString`), así se comparan como texto.
+import { borrarArchivo } from './archivos';
 import { baseLocal } from './base-local';
 
 export type EstadoOperacion = 'PENDIENTE' | 'ENVIANDO' | 'ENVIADO' | 'RECHAZADO';
@@ -204,16 +205,22 @@ export async function pendientesDeOtros(
 }
 
 /**
- * Borra una operación `PENDIENTE` o `RECHAZADO` (criterio 17). Devuelve `false` si no se pudo
+ * Borra una operación `PENDIENTE` o `RECHAZADO` (criterio 17), con su archivo si tiene (102). Devuelve `false` si no se pudo
  * (ya se está enviando, ya se envió o no existe).
  */
 export async function descartar(idOperacion: string): Promise<boolean> {
   const db = await baseLocal();
+  const fila = await db.getFirstAsync<{ archivo_local: string | null }>(
+    "SELECT archivo_local FROM operacion_pendiente WHERE id_operacion = ? AND estado IN ('PENDIENTE', 'RECHAZADO')",
+    idOperacion,
+  );
   const { changes } = await db.runAsync(
     "DELETE FROM operacion_pendiente WHERE id_operacion = ? AND estado IN ('PENDIENTE', 'RECHAZADO')",
     idOperacion,
   );
   if (changes > 0) {
+    // 102, criterio 10: con la operación se borra su archivo del celular.
+    borrarArchivo(fila?.archivo_local);
     avisar();
   }
   return changes > 0;

@@ -8,7 +8,7 @@ import { jsonRespuesta, simularFetch } from './pruebas/fetch-simulado';
 import { tokenDeUsuario } from './pruebas/jwt';
 import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './sesion/keycloak';
 import { RenovacionRechazada } from './sesion/renovacion';
-import { archivosSimulados } from './pruebas/archivos-simulados';
+import { archivosSimulados, escribirArchivo } from './pruebas/archivos-simulados';
 import { guardarTokens, leerTokens } from './sesion/tokens';
 import type { PaqueteDatos } from './api/sincronizacion';
 import { agregar, listar, marcarRechazada, obtener, tomarParaEnvio } from './sync/cola';
@@ -359,6 +359,8 @@ describe('obras del almacenero (004, criterio 1)', () => {
 describe('enviar la foto de avance (005 con la cola de la 102)', () => {
   beforeEach(() => {
     obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([OBRA_PAQUETE]));
+    // Sin señal para subir (cada prueba que sube la foto lo cambia).
+    obras['POST /fotos/url-subida'] = () => Promise.reject(new TypeError('Network request failed'));
     jest.mocked(ImagePicker.launchCameraAsync).mockResolvedValue({
       canceled: false,
       assets: [{ uri: 'file:///original.jpg', width: 4000, height: 3000 }],
@@ -398,8 +400,60 @@ describe('enviar la foto de avance (005 con la cola de la 102)', () => {
     expect(screen.queryByTestId('vista-previa')).toBeNull();
   });
 
+  it('con señal la sube a S3 con la URL de Sincronización y la registra: «Foto enviada.» (102, criterios 2, 5 y 10)', async () => {
+    const puts: string[] = [];
+    const registros: Record<string, unknown>[] = [];
+    obras['POST /fotos/url-subida'] = (init) => {
+      const { obraId, fotoId } = JSON.parse(String(init.body));
+      return jsonRespuesta(201, {
+        url: `https://s3.test/subida/${fotoId}`,
+        claveArchivo: `fotos/${obraId}/${fotoId}.jpg`,
+        expiraEn: '2999-01-01T00:00:00Z',
+      });
+    };
+    obras['POST /lotes'] = (init) => {
+      const { operaciones } = JSON.parse(String(init.body));
+      registros.push(...operaciones.map((o: { datos: Record<string, unknown> }) => o.datos));
+      return jsonRespuesta(200, {
+        resultados: operaciones.map((o: { idOperacion: string; datos: Record<string, unknown> }) => ({
+          idOperacion: o.idOperacion,
+          estado: 'PROCESADO',
+          status: 201,
+          respuesta: { ...o.datos, registradoPor: 'id-usuario1' },
+        })),
+      });
+    };
+    const servicios = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
+      if (init.method === 'PUT' && url.startsWith('https://s3.test/')) {
+        puts.push(url);
+        return new Response(null, { status: 200 });
+      }
+      return servicios(url, init);
+    });
+
+    await prepararFoto();
+    await fireEvent.press(screen.getByRole('button', { name: /Enviar/ }));
+    expect(await screen.findByText('Foto enviada.')).toBeTruthy();
+
+    const [op] = await listar('id-usuario1');
+    expect(puts).toEqual([`https://s3.test/subida/${op.idOperacion}`]);
+    expect(registros).toEqual([
+      {
+        id: op.idOperacion,
+        obraId: 'o1',
+        partidaId: 'p1',
+        tomadaEn: expect.any(String),
+        claveArchivo: `fotos/o1/${op.idOperacion}.jpg`,
+      },
+    ]);
+    expect(op.estado).toBe('ENVIADO');
+    expect(archivosSimulados()).toEqual([]);
+  });
+
   it('con más de 100 fotos sin enviar avisa, pero deja tomar más (102, criterio 3)', async () => {
     for (let i = 0; i < 101; i++) {
+      escribirArchivo(`file:///documento/pendientes/f${i}.jpg`);
       await agregar({
         idOperacion: `f${i}`,
         usuarioId: 'id-usuario1',
