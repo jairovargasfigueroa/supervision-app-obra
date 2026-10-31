@@ -10,12 +10,15 @@ import {
   agregar,
   alCambiarCola,
   contarPendientes,
+  descartar,
   listar,
   obtener,
+  pendientesDeOtros,
   prepararCola,
   type NuevaOperacion,
   type Operacion,
 } from './cola';
+import { nuevoUuid } from '../nucleo/uuid';
 import { iniciarDisparadores } from './disparadores';
 import { enviarPendientes, type ResumenEnvio } from './enviador';
 import { alCambiarPaquete, descargarPaquete, leerPaquete, type PaqueteLocal } from './paquete';
@@ -48,6 +51,12 @@ type ValorSincronizacion = {
    * que termine: devuelve la operación como quedó (`ENVIADO`, `RECHAZADO` o todavía `PENDIENTE`).
    */
   registrar: (registro: RegistroOperacion, esperarMs?: number) => Promise<Operacion>;
+  /**
+   * «Registrar con fecha de hoy» (criterio 14b) de un movimiento rechazado por `PERIODO_CERRADO`: otro
+   * registro (UUID nuevo) con los mismos datos y `registradoEn` = ahora, y descarta el rechazado. Como
+   * `registrar`, espera el envío hasta 5 s y devuelve el nuevo como quedó.
+   */
+  registrarConFechaDeHoy: (rechazada: Operacion, esperarMs?: number) => Promise<Operacion>;
 };
 
 const ContextoSincronizacion = createContext<ValorSincronizacion | null>(null);
@@ -77,6 +86,16 @@ export function usePaquete() {
     retry: false,
   });
   return { paquete, descarga, actualizarDatos, conectado };
+}
+
+/** Registros sin enviar de otros usuarios del celular, con su nombre (criterio 15). */
+export function usePendientesDeOtros() {
+  const { usuario } = useSincronizacion();
+  return useQuery({
+    queryKey: [...claveCola(usuario.id), 'otros'] as const,
+    queryFn: () => pendientesDeOtros(usuario.id),
+    retry: false,
+  });
 }
 
 /** Las operaciones de la cola del usuario, en el orden en que se registraron. */
@@ -166,14 +185,34 @@ export function SincronizacionProvider({ usuario, obtenerToken, children }: Prop
   }, [obtenerToken, usuario.id]);
 
   const registrar = useCallback(
-    async (registro: RegistroOperacion, esperarMs = ESPERA_REGISTRO_MS) => {
+    async (registro: RegistroOperacion, esperarMs = ESPERA_REGISTRO_MS, despuesDeGuardar?: () => Promise<unknown>) => {
       await preparada();
       const operacion = await agregar({ ...registro, usuarioId: usuario.id, usuarioNombre: usuario.nombre });
+      await despuesDeGuardar?.();
       const envio = enviarListos().catch(() => undefined);
       await esperarHasta(envio, esperarMs);
       return (await obtener(operacion.idOperacion)) ?? operacion;
     },
     [usuario.id, usuario.nombre, enviarListos, preparada],
+  );
+
+  const registrarConFechaDeHoy = useCallback(
+    (rechazada: Operacion, esperarMs = ESPERA_REGISTRO_MS) => {
+      const id = nuevoUuid();
+      return registrar(
+        {
+          idOperacion: id,
+          tipo: rechazada.tipo,
+          obraId: rechazada.obraId,
+          datos: { ...rechazada.datos, id, registradoEn: new Date().toISOString() },
+          descripcion: rechazada.descripcion,
+        },
+        esperarMs,
+        // El nuevo ya está guardado: el rechazado se descarta.
+        () => descartar(rechazada.idOperacion),
+      );
+    },
+    [registrar],
   );
 
   // Contador y consultas de la cola y del paquete: se recalculan con cada cambio.
@@ -219,8 +258,18 @@ export function SincronizacionProvider({ usuario, obtenerToken, children }: Prop
   }, [usuario.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const valor = useMemo<ValorSincronizacion>(
-    () => ({ usuario, conectado, pendientes, enviando, descarga, enviarAhora, actualizarDatos, registrar }),
-    [usuario, conectado, pendientes, enviando, descarga, enviarAhora, actualizarDatos, registrar],
+    () => ({
+      usuario,
+      conectado,
+      pendientes,
+      enviando,
+      descarga,
+      enviarAhora,
+      actualizarDatos,
+      registrar,
+      registrarConFechaDeHoy,
+    }),
+    [usuario, conectado, pendientes, enviando, descarga, enviarAhora, actualizarDatos, registrar, registrarConFechaDeHoy],
   );
 
   return <ContextoSincronizacion.Provider value={valor}>{children}</ContextoSincronizacion.Provider>;

@@ -587,7 +587,8 @@ describe('ingreso y salida de material (004, con la cola de la 101)', () => {
     expect((await listar('id-usuario1'))[0].descripcion).toBe('Salida · 12,5 bolsas de Cemento IP-30 · P-02');
   });
 
-  it('periodo cerrado: queda «Rechazado» con el periodo del movimiento (criterios 7 y 14)', async () => {
+  it('periodo cerrado: queda «Rechazado» con el periodo y ofrece «Registrar con fecha de hoy» (criterios 7, 14 y 14b)', async () => {
+    const registrar = obras['POST /movimientos']!;
     obras['POST /movimientos'] = () =>
       jsonRespuesta(
         409,
@@ -600,7 +601,21 @@ describe('ingreso y salida de material (004, con la cola de la 101)', () => {
     await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
     expect(await screen.findByText(/^El periodo \d{4}-\d{2} ya está cerrado$/)).toBeTruthy();
     expect(screen.queryByText('Registrado')).toBeNull();
-    expect((await listar('id-usuario1'))[0]).toMatchObject({ estado: 'RECHAZADO', errorCodigo: 'PERIODO_CERRADO' });
+    const [rechazada] = await listar('id-usuario1');
+    expect(rechazada).toMatchObject({ estado: 'RECHAZADO', errorCodigo: 'PERIODO_CERRADO' });
+
+    // «Registrar con fecha de hoy» (criterio 14b): otro registro, con la fecha actual; el rechazado se descarta.
+    obras['POST /movimientos'] = registrar;
+    await fireEvent.press(screen.getByRole('button', { name: /Registrar con fecha de hoy/ }));
+    expect(await screen.findByText('Registrado')).toBeTruthy();
+    const ops = await listar('id-usuario1');
+    expect(ops).toHaveLength(1);
+    expect(ops[0].idOperacion).not.toBe(rechazada.idOperacion);
+    expect(ops[0]).toMatchObject({ estado: 'ENVIADO', descripcion: rechazada.descripcion });
+    expect(movimientos[0].cuerpo).toMatchObject({ id: ops[0].idOperacion, materialId: 'm1', cantidad: 5 });
+    expect(Date.parse(String(movimientos[0].cuerpo.registradoEn))).toBeGreaterThanOrEqual(
+      Date.parse(String(rechazada.datos.registradoEn)),
+    );
   });
 
   it('sin señal: «Guardado en el celular», el stock incluye la salida y el siguiente registro es otro (criterios 8 a 10)', async () => {
@@ -799,6 +814,31 @@ describe('pendientes de envío (101, criterios 16 y 17)', () => {
     await waitFor(() => expect(screen.queryByText('Salida · 3 bolsas de Cemento IP-30 · P-02')).toBeNull());
     expect(await obtener('b')).toBeNull();
     expect(await screen.findByLabelText('Pendientes: 1')).toBeTruthy();
+  });
+
+  it('avisa los registros de otro usuario con su nombre y no los envía (criterio 15)', async () => {
+    await agregar({ ...operacion('x', 'Salida de otro'), usuarioId: 'id-otro', usuarioNombre: 'Rosa Flores' });
+    await abrirPendientes();
+    expect(
+      await screen.findByText('Hay 1 registro de Rosa Flores sin enviar; se enviarán cuando esa persona vuelva a iniciar sesión'),
+    ).toBeTruthy();
+    expect(screen.queryByText('Salida de otro')).toBeNull();
+    expect((await obtener('x'))?.estado).toBe('PENDIENTE');
+  });
+
+  it('un rechazado por periodo cerrado se registra con fecha de hoy y el rechazado se descarta (criterio 14b)', async () => {
+    obras['POST /lotes'] = procesarLote;
+    await abrirPendientes();
+    await fireEvent.press(
+      await screen.findByLabelText('Registrar con fecha de hoy: Salida · 2 bolsas de Cemento IP-30 · P-01'),
+    );
+    expect(await screen.findByText('Registrado')).toBeTruthy();
+    expect(await obtener('a')).toBeNull();
+    const nuevas = (await listar('id-usuario1')).filter((o) => o.descripcion === 'Salida · 2 bolsas de Cemento IP-30 · P-01');
+    expect(nuevas).toHaveLength(1);
+    expect(nuevas[0]).toMatchObject({ estado: 'ENVIADO' });
+    expect(nuevas[0].datos.id).toBe(nuevas[0].idOperacion);
+    expect(nuevas[0].datos.registradoEn).not.toBe('2026-10-31T14:00:00Z');
   });
 
   it('«Enviar ahora» envía los pendientes sin esperar su próximo intento', async () => {

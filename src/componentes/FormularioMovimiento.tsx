@@ -6,6 +6,7 @@ import type { ObraPaquete, PaqueteDatos } from '../api/sincronizacion';
 import { primerError, useMovimiento } from '../formularios/useMovimiento';
 import { presentacionEstadoStock } from '../nucleo/estado-stock';
 import { formatearCantidadMaterial } from '../nucleo/formato';
+import { TEXTO_REGISTRAR_CON_FECHA_DE_HOY } from '../sync/mensajes';
 import { radios, TAMANO_TACTIL_MINIMO, useTema } from '../tema';
 import { TituloObra } from './TituloObra';
 import { EstadoChip } from './EstadoChip';
@@ -178,6 +179,18 @@ export function FormularioMovimiento({ tipo, obra, datos }: Props) {
             <Text variant="bodyMedium" style={{ color: colors.error }}>
               {movimiento.fallo}
             </Text>
+            {movimiento.puedeRegistrarHoy ? (
+              <Button
+                mode="contained"
+                icon="calendar-today"
+                onPress={() => void movimiento.registrarHoy()}
+                disabled={enviando}
+                style={estilos.botonAviso}
+                contentStyle={estilos.contenidoBoton}
+              >
+                {TEXTO_REGISTRAR_CON_FECHA_DE_HOY}
+              </Button>
+            ) : null}
           </Surface>
         ) : null}
         {movimiento.avisoStock ? (
@@ -219,4 +232,5 @@ const estilos = StyleSheet.create({
   tarjeta: { borderRadius: radios.tarjeta, overflow: 'hidden' },
   aviso: { borderRadius: radios.tarjeta, padding: 12 },
   contenidoBoton: { minHeight: TAMANO_TACTIL_MINIMO },
+  botonAviso: { marginTop: 8, alignSelf: 'flex-start' },
 });

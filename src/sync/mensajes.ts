@@ -33,6 +33,19 @@ export const MENSAJE_CONFIRMAR_DESCARTE = '¿Descartar este registro? No se envi
 /** «Pendientes de envío» sin registros (estado vacío; texto de la app, falta en el catálogo). */
 export const MENSAJE_SIN_PENDIENTES = 'No hay registros pendientes de envío.';
 
+/** Pendientes de otro usuario en el celular (criterio 15). */
+export function mensajePendientesDeOtro(n: number, nombre: string): string {
+  return `Hay ${n} ${n === 1 ? 'registro' : 'registros'} de ${nombre} sin enviar; se enviarán cuando esa persona vuelva a iniciar sesión`;
+}
+
+/** Botón de un movimiento rechazado por `PERIODO_CERRADO` (criterio 14b). */
+export const TEXTO_REGISTRAR_CON_FECHA_DE_HOY = 'Registrar con fecha de hoy';
+
+/** Si a un rechazo se le puede ofrecer «Registrar con fecha de hoy» (criterio 14b). */
+export function sePuedeRegistrarHoy(op: Pick<Operacion, 'estado' | 'tipo' | 'errorCodigo'>): boolean {
+  return op.estado === 'RECHAZADO' && op.tipo === 'MOVIMIENTO_MATERIAL' && op.errorCodigo === 'PERIODO_CERRADO';
+}
+
 /** Cerrar sesión con pendientes (criterio 18). */
 export function mensajePendientesAlCerrar(n: number): string {
   return `Tienes ${n} ${n === 1 ? 'registro' : 'registros'} sin enviar; se enviarán cuando vuelvas a iniciar sesión con este usuario`;

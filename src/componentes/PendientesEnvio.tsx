@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { SectionList, StyleSheet, View } from 'react-native';
-import { Button, Card, Dialog, Portal, Snackbar, Text } from 'react-native-paper';
+import { Button, Card, Dialog, Portal, Snackbar, Surface, Text } from 'react-native-paper';
 
 import { mensajeDeError, MENSAJE_SIN_CONEXION } from '../api/errores';
 import type { TonoEstado } from '../nucleo/estado-stock';
@@ -9,10 +9,15 @@ import { descartar, type EstadoOperacion, type Operacion } from '../sync/cola';
 import {
   ETIQUETA_ESTADO,
   MENSAJE_CONFIRMAR_DESCARTE,
+  MENSAJE_GUARDADO_EN_CELULAR,
   MENSAJE_SIN_PENDIENTES,
+  mensajePendientesDeOtro,
   mensajeRechazo,
+  sePuedeRegistrarHoy,
+  TEXTO_REGISTRAR_CON_FECHA_DE_HOY,
 } from '../sync/mensajes';
-import { useOperaciones, useSincronizacion } from '../sync/sincronizacion';
+import { MENSAJE_REGISTRADO } from '../formularios/movimiento';
+import { useOperaciones, usePendientesDeOtros, useSincronizacion } from '../sync/sincronizacion';
 import { radios, TAMANO_TACTIL_MINIMO, useTema } from '../tema';
 import { EstadoChip } from './EstadoChip';
 import { EstadoVacio } from './EstadoVacio';
@@ -43,8 +48,10 @@ export function agruparPorEstado(operaciones: readonly Operacion[]) {
  */
 export function PendientesEnvio() {
   const { colors } = useTema();
-  const { conectado, enviando, pendientes, enviarAhora, actualizarDatos } = useSincronizacion();
+  const { conectado, enviando, pendientes, enviarAhora, actualizarDatos, registrarConFechaDeHoy } =
+    useSincronizacion();
   const operaciones = useOperaciones();
+  const deOtros = usePendientesDeOtros();
   const [porDescartar, setPorDescartar] = useState<Operacion | null>(null);
   const [actualizando, setActualizando] = useState(false);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -68,6 +75,21 @@ export function PendientesEnvio() {
       .finally(() => setActualizando(false));
   };
 
+  // «Registrar con fecha de hoy» (criterio 14b): otro registro con la fecha actual; el rechazado se descarta.
+  const pulsarRegistrarHoy = (op: Operacion) => {
+    registrarConFechaDeHoy(op)
+      .then((nueva) =>
+        setAviso(
+          nueva.estado === 'ENVIADO'
+            ? MENSAJE_REGISTRADO
+            : nueva.estado === 'RECHAZADO'
+              ? mensajeRechazo(nueva)
+              : MENSAJE_GUARDADO_EN_CELULAR,
+        ),
+      )
+      .catch((error: unknown) => setAviso(mensajeDeError(error)));
+  };
+
   const confirmarDescarte = async () => {
     const op = porDescartar;
     setPorDescartar(null);
@@ -81,6 +103,18 @@ export function PendientesEnvio() {
       <Text variant="titleLarge" style={[estilos.titulo, { color: colors.onSurface }]}>
         Pendientes de envío
       </Text>
+      {(deOtros.data ?? []).map((otro) => (
+        <Surface
+          key={otro.usuarioId}
+          mode="flat"
+          style={[estilos.aviso, { backgroundColor: colors.atencionSuave }]}
+          testID="pendientes-de-otro"
+        >
+          <Text variant="bodyMedium" style={{ color: colors.atencion }}>
+            {mensajePendientesDeOtro(otro.cantidad, otro.usuarioNombre)}
+          </Text>
+        </Surface>
+      ))}
       <View style={estilos.botones}>
         <Button
           mode="contained"
@@ -121,7 +155,13 @@ export function PendientesEnvio() {
             {section.titulo} ({section.data.length})
           </Text>
         )}
-        renderItem={({ item }) => <TarjetaOperacion op={item} onDescartar={() => setPorDescartar(item)} />}
+        renderItem={({ item }) => (
+          <TarjetaOperacion
+            op={item}
+            onDescartar={() => setPorDescartar(item)}
+            onRegistrarHoy={() => pulsarRegistrarHoy(item)}
+          />
+        )}
         stickySectionHeadersEnabled={false}
       />
       <Portal>
@@ -148,7 +188,9 @@ export function PendientesEnvio() {
   );
 }
 
-function TarjetaOperacion({ op, onDescartar }: { op: Operacion; onDescartar: () => void }) {
+type PropsTarjeta = { op: Operacion; onDescartar: () => void; onRegistrarHoy: () => void };
+
+function TarjetaOperacion({ op, onDescartar, onRegistrarHoy }: PropsTarjeta) {
   const { colors } = useTema();
   const sePuedeDescartar = op.estado === 'PENDIENTE' || op.estado === 'RECHAZADO';
   return (
@@ -170,7 +212,18 @@ function TarjetaOperacion({ op, onDescartar }: { op: Operacion; onDescartar: () 
         ) : null}
       </Card.Content>
       {sePuedeDescartar ? (
-        <Card.Actions>
+        <Card.Actions style={estilos.acciones}>
+          {sePuedeRegistrarHoy(op) ? (
+            <Button
+              mode="contained"
+              icon="calendar-today"
+              onPress={onRegistrarHoy}
+              accessibilityLabel={`${TEXTO_REGISTRAR_CON_FECHA_DE_HOY}: ${op.descripcion}`}
+              contentStyle={estilos.boton}
+            >
+              {TEXTO_REGISTRAR_CON_FECHA_DE_HOY}
+            </Button>
+          ) : null}
           <Button
             icon="delete-outline"
             onPress={onDescartar}
@@ -198,4 +251,6 @@ const estilos = StyleSheet.create({
   contenido: { gap: 4 },
   fila: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
   descripcion: { flex: 1 },
+  aviso: { borderRadius: radios.tarjeta, padding: 12 },
+  acciones: { flexWrap: 'wrap', justifyContent: 'flex-start', rowGap: 8 },
 });

@@ -8,6 +8,7 @@ import {
   marcarParaReintento,
   marcarRechazada,
   obtener,
+  pendientesDeOtros,
   prepararCola,
   tomarParaEnvio,
   type NuevaOperacion,
@@ -70,6 +71,19 @@ describe('cola de envíos', () => {
     expect(ids(await listar('u2'))).toEqual(['x']);
     expect(await contarPendientes('u1')).toBe(2); // «a» (ENVIANDO) y «d» (PENDIENTE)
     expect(await contarPendientes('u2')).toBe(1);
+  });
+
+  it('cuenta los pendientes de otros usuarios con su nombre (criterio 15)', async () => {
+    await agregar(nueva('a'), T0);
+    await agregar(nueva('x1', 'u2'), mas(1));
+    await agregar(nueva('x2', 'u2'), mas(2));
+    await agregar(nueva('x3', 'u2'), mas(3));
+    await marcarEnviada('x3', {}, mas(4));
+    await agregar(nueva('y1', 'u3', { usuarioNombre: 'Carla' }), mas(5));
+    await marcarRechazada('y1', 'MATERIAL_INACTIVO', null, {});
+
+    expect(await pendientesDeOtros('u1')).toEqual([{ usuarioId: 'u2', usuarioNombre: 'Beto Almacenero', cantidad: 2 }]);
+    expect(await pendientesDeOtros('u2')).toEqual([{ usuarioId: 'u1', usuarioNombre: 'Ana Almacenera', cantidad: 1 }]);
   });
 
   it('descarta PENDIENTE y RECHAZADO, pero no lo que se está enviando o ya se envió', async () => {

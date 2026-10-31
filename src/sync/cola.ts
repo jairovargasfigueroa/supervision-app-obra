@@ -170,6 +170,23 @@ export async function contarPendientes(usuarioId: string): Promise<number> {
 }
 
 /**
+ * Registros sin enviar (`PENDIENTE` y `ENVIANDO`) de otros usuarios en este celular (criterio 15): se
+ * envían cuando esa persona vuelve a iniciar sesión.
+ */
+export async function pendientesDeOtros(
+  usuarioId: string,
+): Promise<{ usuarioId: string; usuarioNombre: string; cantidad: number }[]> {
+  const db = await baseLocal();
+  const filas = await db.getAllAsync<{ usuario_id: string; usuario_nombre: string; n: number }>(
+    `SELECT usuario_id, MAX(usuario_nombre) AS usuario_nombre, COUNT(*) AS n FROM operacion_pendiente
+     WHERE usuario_id <> ? AND estado IN ('PENDIENTE', 'ENVIANDO')
+     GROUP BY usuario_id ORDER BY MIN(creada_en)`,
+    usuarioId,
+  );
+  return filas.map((f) => ({ usuarioId: f.usuario_id, usuarioNombre: f.usuario_nombre, cantidad: f.n }));
+}
+
+/**
  * Borra una operación `PENDIENTE` o `RECHAZADO` (criterio 17). Devuelve `false` si no se pudo
  * (ya se está enviando, ya se envió o no existe).
  */

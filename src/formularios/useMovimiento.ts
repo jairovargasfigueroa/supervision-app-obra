@@ -9,7 +9,13 @@ import { MENSAJES } from '../api/errores';
 import { leerMovimientoRegistrado, type TipoMovimiento } from '../api/materiales';
 import type { ObraPaquete, PaqueteDatos } from '../api/sincronizacion';
 import { nuevoUuid } from '../nucleo/uuid';
-import { descripcionMovimiento, MENSAJE_GUARDADO_EN_CELULAR, mensajeRechazo } from '../sync/mensajes';
+import type { Operacion } from '../sync/cola';
+import {
+  descripcionMovimiento,
+  MENSAJE_GUARDADO_EN_CELULAR,
+  mensajeRechazo,
+  sePuedeRegistrarHoy,
+} from '../sync/mensajes';
 import { useOperaciones, useSincronizacion } from '../sync/sincronizacion';
 import { stockConPendientes } from '../sync/stock-local';
 import { avisoSuperaStock, avisoSuperaStockLocal, MENSAJE_REGISTRADO } from './movimiento';
@@ -29,7 +35,7 @@ export function primerError(errores: readonly unknown[]): string | null {
 }
 
 export function useMovimiento(tipo: TipoMovimiento, obra: ObraPaquete, datos: PaqueteDatos) {
-  const { registrar } = useSincronizacion();
+  const { registrar, registrarConFechaDeHoy } = useSincronizacion();
   const operaciones = useOperaciones();
   // El UUID del registro se crea al abrir el formulario (diseño 004) y se renueva al registrar.
   const [idFormulario, setIdFormulario] = useState(nuevoUuid);
@@ -38,6 +44,8 @@ export function useMovimiento(tipo: TipoMovimiento, obra: ObraPaquete, datos: Pa
   const [resultado, setResultado] = useState<string | null>(null);
   const [fallo, setFallo] = useState<string | null>(null);
   const [avisoStock, setAvisoStock] = useState<string | null>(null);
+  /** Último registro rechazado, para «Registrar con fecha de hoy» si fue por periodo cerrado. */
+  const [rechazada, setRechazada] = useState<Operacion | null>(null);
 
   const materiales = useMemo(
     () => [...datos.materiales].sort((a, b) => a.codigo.localeCompare(b.codigo)),
@@ -64,6 +72,7 @@ export function useMovimiento(tipo: TipoMovimiento, obra: ObraPaquete, datos: Pa
       setResultado(null);
       setFallo(null);
       setAvisoStock(null);
+      setRechazada(null);
       try {
         const op = await registrar({
           idOperacion: registro.id,
@@ -79,6 +88,7 @@ export function useMovimiento(tipo: TipoMovimiento, obra: ObraPaquete, datos: Pa
         if (op.estado === 'RECHAZADO') {
           // Rechazo definitivo (criterio 14): se muestra el motivo y los datos quedan para corregirlos.
           setFallo(mensajeRechazo(op));
+          setRechazada(op);
           return;
         }
         formApi.reset();
@@ -101,6 +111,31 @@ export function useMovimiento(tipo: TipoMovimiento, obra: ObraPaquete, datos: Pa
 
   const cerrarResultado = useCallback(() => setResultado(null), []);
 
+  // «Registrar con fecha de hoy» (101, criterio 14b): otro registro con los mismos datos y la fecha
+  // actual; el rechazado se descarta.
+  const registrarHoy = useCallback(async () => {
+    if (!rechazada) {
+      return;
+    }
+    setEnviando(true);
+    setFallo(null);
+    try {
+      const op = await registrarConFechaDeHoy(rechazada);
+      setRechazada(null);
+      if (op.estado === 'RECHAZADO') {
+        setFallo(mensajeRechazo(op));
+        setRechazada(op);
+        return;
+      }
+      formulario.reset();
+      setResultado(op.estado === 'ENVIADO' ? MENSAJE_REGISTRADO : MENSAJE_GUARDADO_EN_CELULAR);
+    } catch {
+      setFallo(MENSAJES.ERROR_INTERNO);
+    } finally {
+      setEnviando(false);
+    }
+  }, [rechazada, registrarConFechaDeHoy, formulario]);
+
   return {
     formulario,
     /** Materiales activos del paquete, por código. */
@@ -117,5 +152,8 @@ export function useMovimiento(tipo: TipoMovimiento, obra: ObraPaquete, datos: Pa
     cerrarResultado,
     /** Aviso de salida mayor al stock (criterios 5 y 10), o `null`. */
     avisoStock,
+    /** El último rechazo fue por periodo cerrado: se ofrece «Registrar con fecha de hoy» (criterio 14b). */
+    puedeRegistrarHoy: rechazada !== null && sePuedeRegistrarHoy(rechazada),
+    registrarHoy,
   };
 }

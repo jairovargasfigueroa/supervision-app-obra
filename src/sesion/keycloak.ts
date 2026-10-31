@@ -11,7 +11,9 @@ import type { Tokens } from './tokens';
 // Solo hace algo en web: cierra la ventana emergente al volver del inicio de sesión.
 WebBrowser.maybeCompleteAuthSession();
 
-const ALCANCES = ['openid', 'profile'];
+// `offline_access` (101, sesión larga): Keycloak entrega un refresh token «offline» que vale mientras la
+// sesión offline no pase 30 días sin usarse, para enviar lo registrado aunque el celular pase días sin señal.
+export const ALCANCES = ['openid', 'profile', 'offline_access'];
 
 /**
  * Dirección a la que vuelve Keycloak. En Expo Go: `exp://localhost:8090/--/iniciar-sesion`; en un
@@ -104,26 +106,41 @@ export async function renovarTokens(refreshToken: string): Promise<Tokens> {
   }
 }
 
+const FORMULARIO = { 'Content-Type': 'application/x-www-form-urlencoded' };
+
 /**
- * Cierra la sesión en Keycloak: `POST` al `end_session_endpoint` del realm con el refresh token
- * (cierre por canal trasero de un cliente público). Así termina también la sesión SSO y la próxima
- * vez se vuelve a pedir la contraseña. Devuelve `false` si no se pudo (sin conexión, por ejemplo).
+ * Cierra la sesión en Keycloak. Primero revoca el refresh token «offline» en el `revocation_endpoint`
+ * (101: así termina la sesión offline de 30 días; `token_type_hint=refresh_token`) y después hace
+ * `POST` al `end_session_endpoint` con el refresh token (cierre por canal trasero de un cliente
+ * público): termina también la sesión SSO y la próxima vez se vuelve a pedir la contraseña. Devuelve
+ * `false` si algo no se pudo (sin conexión, por ejemplo).
  */
 export async function cerrarSesionKeycloak(refreshToken: string): Promise<boolean> {
   try {
     const discovery = await obtenerDescubrimiento();
+    const { clientId } = configuracion();
+    let revocado = false;
+    if (discovery.revocationEndpoint) {
+      const revocacion = await fetch(discovery.revocationEndpoint, {
+        method: 'POST',
+        headers: FORMULARIO,
+        body: new URLSearchParams({
+          client_id: clientId,
+          token: refreshToken,
+          token_type_hint: 'refresh_token',
+        }).toString(),
+      });
+      revocado = revocacion.ok;
+    }
     if (!discovery.endSessionEndpoint) {
       return false;
     }
     const respuesta = await fetch(discovery.endSessionEndpoint, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        client_id: configuracion().clientId,
-        refresh_token: refreshToken,
-      }).toString(),
+      headers: FORMULARIO,
+      body: new URLSearchParams({ client_id: clientId, refresh_token: refreshToken }).toString(),
     });
-    return respuesta.ok;
+    return revocado && respuesta.ok;
   } catch {
     return false;
   }

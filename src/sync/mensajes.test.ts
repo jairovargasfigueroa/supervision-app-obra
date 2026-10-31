@@ -2,8 +2,10 @@ import {
   descripcionMovimiento,
   mensajeIncluyeSinEnviar,
   mensajePendientesAlCerrar,
+  mensajePendientesDeOtro,
   mensajeRechazo,
   mensajeSinSenal,
+  sePuedeRegistrarHoy,
 } from './mensajes';
 
 const cemento = { nombre: 'Cemento IP-30', unidad: 'bolsa', unidadPlural: 'bolsas' };
@@ -39,6 +41,16 @@ describe('textos de la 101', () => {
     expect(mensajeSinSenal('2026-11-15T18:30:00.000Z')).toBe('Sin señal · datos del 15/11 14:30');
     expect(mensajeIncluyeSinEnviar(3)).toBe('Incluye 3 movimientos sin enviar');
     expect(mensajeIncluyeSinEnviar(1)).toBe('Incluye 1 movimiento sin enviar');
+  });
+
+  it('pendientes de otro usuario (criterio 15) y «Registrar con fecha de hoy» solo por periodo cerrado (14b)', () => {
+    expect(mensajePendientesDeOtro(2, 'Rosa Flores')).toBe(
+      'Hay 2 registros de Rosa Flores sin enviar; se enviarán cuando esa persona vuelva a iniciar sesión',
+    );
+    const rechazo = { estado: 'RECHAZADO' as const, tipo: 'MOVIMIENTO_MATERIAL' as const };
+    expect(sePuedeRegistrarHoy({ ...rechazo, errorCodigo: 'PERIODO_CERRADO' })).toBe(true);
+    expect(sePuedeRegistrarHoy({ ...rechazo, errorCodigo: 'MATERIAL_INACTIVO' })).toBe(false);
+    expect(sePuedeRegistrarHoy({ ...rechazo, estado: 'PENDIENTE', errorCodigo: 'PERIODO_CERRADO' })).toBe(false);
   });
 
   it('aviso al cerrar sesión con pendientes (criterio 18)', () => {
