@@ -120,7 +120,8 @@ src/
 
 ## Pruebas
 
-`jest-expo` + Testing Library: cliente REST (reintentos de las consultas), cola, enviador y sincronización (101), esquemas Zod, componentes principales. En `rutas.test.tsx`, Sincronización se simula pasando cada operación de `POST /lotes` al `POST /movimientos` simulado. `npm test`, `npx tsc --noEmit` y `npx expo-doctor` antes de cada commit.
+`jest-expo` + Testing Library: cliente REST (reintentos de las consultas), cola, enviador y sincronización (101), esquemas Zod, componentes principales. En `rutas.test.tsx`, Sincronización se simula pasando cada operación de `POST /lotes` al `POST /movimientos` simulado.
+- Pruebas de la 101 («Pruebas» del diseño): `sync/cola.test.ts` (orden, filtro por usuario, sin duplicar, descartar, `ENVIANDO` → `PENDIENTE` al iniciar, limpieza a las 24 h), `sync/enviador.test.ts` (espera creciente; con la red simulada: `PROCESADO`, `ERROR`, `REINTENTAR`, fallo del lote, `TOKEN_VENCIDO`, `401` y `400` del lote, lotes de 20, candado), `sync/stock-local.test.ts` (stock con pendientes y estado), `sync/paquete.test.ts` (`If-None-Match`, `304`, fallo), `sync/base-local.test.ts` (migraciones), `sync/sincronizacion.test.tsx` y, de punta a punta en la app, `rutas.test.tsx` (formularios por la cola, sin señal, stock local, «Pendientes de envío», cerrar sesión con pendientes). `npm test`, `npx tsc --noEmit` y `npx expo-doctor` antes de cada commit.
 
 - Las pruebas van junto al archivo que prueban (`formato.test.ts`, `estados.test.tsx`).
 - Las rutas (`src/app/`) se prueban desde fuera de esa carpeta, en `src/rutas.test.tsx`, con `renderRouter('src/app')` de `expo-router/testing-library`: todo archivo dentro de `src/app/` es una pantalla, así que ahí no van pruebas.

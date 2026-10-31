@@ -15,5 +15,5 @@ Marca cada tarea al terminarla (con sus pruebas y su commit).
 - [x] Formularios de ingreso y salida (004) pasan por la cola; mensajes «Registrado» / «Guardado en el celular» / rechazo
 - [x] Lista de obras y stock desde el paquete local, con pendientes sumados y aviso «Sin señal · datos del …»
 - [x] Pantalla «Pendientes de envío» con contador en el menú, estados, «Enviar ahora», «Descartar» y «Actualizar datos»
-- [ ] Pruebas de la spec (cola, espera creciente, enviador con `fetch` simulado, stock local)
+- [x] Pruebas de la spec (cola, espera creciente, enviador con `fetch` simulado, stock local)
 - [ ] Puntos de la evaluación (30/10/2026): sesión larga con `scope=openid offline_access` y revocación al cerrar sesión; «Registrar con fecha de hoy» en un movimiento rechazado por `PERIODO_CERRADO` (UUID nuevo, fecha actual, descarta el rechazado); aviso de pendientes de otro usuario con su nombre (`usuario_nombre`)
