@@ -1,25 +1,15 @@
-// Subida del archivo de una foto con la URL firmada que da Obras (005): `PUT` directo al
-// almacenamiento (S3), sin token. La foto comprimida se lee del celular (`file://`).
+// Subida del archivo de una foto con la URL firmada (005; desde la 102 la URL la pide la app a
+// Sincronización): `PUT` directo al almacenamiento (S3), sin token. El archivo es el guardado en el
+// celular (`File` de expo-file-system, que implementa `Blob`).
 import { fetchConTiempo } from './cliente';
 import { ErrorApi } from './errores';
-import { enviar } from './red';
 
-/** Una foto de 1600 px pesa unos cientos de KB; con mala señal puede tardar más que una consulta. */
-export const TIEMPO_MAXIMO_SUBIDA_MS = 60_000;
-
-/** El archivo comprimido como `Blob`. Si ya no está en el celular, `ErrorApi` `archivo`. */
-export async function leerArchivo(uri: string): Promise<Blob> {
-  try {
-    const respuesta = await enviar(uri);
-    return await respuesta.blob();
-  } catch {
-    throw new ErrorApi({ tipo: 'archivo' });
-  }
-}
+/** Tiempo máximo para subir el archivo (102, criterio 6); pasado, cuenta como fallo de red. */
+export const TIEMPO_MAXIMO_SUBIDA_MS = 30_000;
 
 /**
- * `PUT` del archivo a la URL firmada (diseño 005). Si el almacenamiento lo rechaza, `ErrorApi`
- * `subida` con su estado (`403` si la URL venció).
+ * `PUT` del archivo a la URL firmada. Si el almacenamiento lo rechaza, `ErrorApi` `subida` con su
+ * estado (`403` si la URL venció).
  */
 export async function subirArchivo(url: string, archivo: Blob): Promise<void> {
   const respuesta = await fetchConTiempo(

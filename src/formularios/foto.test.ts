@@ -23,40 +23,40 @@ beforeEach(() => {
   permisoCamara.mockResolvedValue({ granted: true } as ImagePicker.CameraPermissionResponse);
 });
 
-describe('reduccion (criterio 2)', () => {
-  it('fija el lado más largo en 1600 px', () => {
-    expect(reduccion(4000, 3000)).toEqual({ width: 1600 });
-    expect(reduccion(3000, 4000)).toEqual({ height: 1600 });
-    expect(reduccion(2000, 2000)).toEqual({ width: 1600 });
+describe('reduccion (102, criterio 1)', () => {
+  it('fija el lado más largo en 1280 px', () => {
+    expect(reduccion(4000, 3000)).toEqual({ width: 1280 });
+    expect(reduccion(3000, 4000)).toEqual({ height: 1280 });
+    expect(reduccion(2000, 2000)).toEqual({ width: 1280 });
   });
 
   it('no agranda una foto que ya cabe', () => {
-    expect(reduccion(1600, 1200)).toBeNull();
+    expect(reduccion(1280, 960)).toBeNull();
     expect(reduccion(800, 600)).toBeNull();
   });
 });
 
-describe('comprimirFoto (criterio 2)', () => {
-  it('reduce a 1600 px por lado y guarda JPEG con compress 0.8', async () => {
+describe('comprimirFoto (102, criterio 1)', () => {
+  it('reduce a 1280 px por lado y guarda JPEG con compress 0.7', async () => {
     const comprimida = await comprimirFoto('file:///original.jpg');
     expect(ImageManipulator.manipulate).toHaveBeenCalledWith('file:///original.jpg');
-    expect(contextoSimulado().resize).toHaveBeenCalledWith({ width: 1600 });
-    expect(contextoSimulado().guardar).toHaveBeenCalledWith({ compress: 0.8, format: 'jpeg' });
-    expect(comprimida).toEqual({ uri: 'file:///comprimida.jpg', ancho: 1600, alto: 1200 });
+    expect(contextoSimulado().resize).toHaveBeenCalledWith({ width: 1280 });
+    expect(contextoSimulado().guardar).toHaveBeenCalledWith({ compress: 0.7, format: 'jpeg' });
+    expect(comprimida).toEqual({ uri: 'file:///comprimida.jpg', ancho: 1280, alto: 960 });
     expect(contextoSimulado().release).toHaveBeenCalled();
   });
 
   it('una foto vertical se reduce por el alto', async () => {
     simularManipulador({ ancho: 3000, alto: 4000 });
     await comprimirFoto('file:///vertical.jpg');
-    expect(contextoSimulado().resize).toHaveBeenCalledWith({ height: 1600 });
+    expect(contextoSimulado().resize).toHaveBeenCalledWith({ height: 1280 });
   });
 
-  it('una foto chica no se agranda, pero igual se guarda como JPEG 0.8', async () => {
+  it('una foto chica no se agranda, pero igual se guarda como JPEG 0.7', async () => {
     simularManipulador({ ancho: 1200, alto: 900 });
     await comprimirFoto('file:///chica.jpg');
     expect(contextoSimulado().resize).not.toHaveBeenCalled();
-    expect(contextoSimulado().guardar).toHaveBeenCalledWith({ compress: 0.8, format: 'jpeg' });
+    expect(contextoSimulado().guardar).toHaveBeenCalledWith({ compress: 0.7, format: 'jpeg' });
   });
 });
 
@@ -100,7 +100,7 @@ describe('obtenerFoto (criterio 1)', () => {
     await expect(obtenerFoto('camara', ahora)).resolves.toEqual({
       tipo: 'lista',
       foto: {
-        foto: { uri: 'file:///comprimida.jpg', ancho: 1600, alto: 1200 },
+        foto: { uri: 'file:///comprimida.jpg', ancho: 1280, alto: 960 },
         tomadaEn: '2026-11-15T15:20:00.000Z',
       },
     });

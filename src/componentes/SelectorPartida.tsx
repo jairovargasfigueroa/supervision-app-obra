@@ -1,6 +1,7 @@
 import { RadioButton } from 'react-native-paper';
 
-import type { Partida } from '../api/obras';
+/** Lo que el selector necesita de una partida (del paquete de datos guardado en el celular). */
+type Partida = { id: string; codigo: string; nombre: string };
 
 type Props = {
   partidas: readonly Partida[];

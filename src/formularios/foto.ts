@@ -1,10 +1,10 @@
-// Foto de avance (005): tomarla con la cámara o elegirla de la galería y reducirla antes de enviarla
-// (criterio 2: máximo 1600 px por lado y JPEG con calidad 80).
+// Foto de avance (005): tomarla con la cámara o elegirla de la galería y reducirla antes de guardarla
+// en el celular (102, criterio 1: máximo 1280 px por lado y JPEG con calidad 70, unos 150 a 400 KB).
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
-export const LADO_MAXIMO_PX = 1600;
-export const CALIDAD_JPEG = 0.8;
+export const LADO_MAXIMO_PX = 1280;
+export const CALIDAD_JPEG = 0.7;
 
 export type FotoComprimida = { uri: string; ancho: number; alto: number };
 
@@ -23,7 +23,7 @@ export type ResultadoFoto =
   | { tipo: 'sin-permiso' };
 
 /**
- * Tamaño al que se reduce: se fija el lado más largo en 1600 px y el otro sale de la proporción.
+ * Tamaño al que se reduce: se fija el lado más largo en 1280 px y el otro sale de la proporción.
  * `null` si la foto ya cabe (no se agranda).
  */
 export function reduccion(
@@ -38,7 +38,7 @@ export function reduccion(
 }
 
 /**
- * Reduce la foto a 1600 px por lado como máximo y la guarda como JPEG con `compress: 0.8`. Las
+ * Reduce la foto a 1280 px por lado como máximo y la guarda como JPEG con `compress: 0.7`. Las
  * medidas se leen de la imagen ya cargada (con la orientación aplicada), no de las del selector.
  */
 export async function comprimirFoto(uri: string): Promise<FotoComprimida> {

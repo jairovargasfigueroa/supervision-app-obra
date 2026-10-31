@@ -1,12 +1,19 @@
 // Cola local de operaciones por enviar a Sincronización (101, «Base local» y «Módulo src/sync/»).
 // Todo registro se guarda aquí primero, con su UUID, y sale en el orden en que se registró.
 // Las fechas se guardan en ISO 8601 UTC (`toISOString`), así se comparan como texto.
+import { borrarArchivo } from './archivos';
 import { baseLocal } from './base-local';
 
 export type EstadoOperacion = 'PENDIENTE' | 'ENVIANDO' | 'ENVIADO' | 'RECHAZADO';
 
-/** Tipos de operación de Sincronización que registra la app (101). */
-export type TipoOperacion = 'MOVIMIENTO_MATERIAL';
+/** Tipos de operación de Sincronización que registra la app (101, 102). */
+export type TipoOperacion = 'MOVIMIENTO_MATERIAL' | 'FOTO_AVANCE';
+
+/**
+ * Archivo de la operación (102): `NINGUNO` (sin archivo), `PENDIENTE` (falta subirlo), `SUBIENDO` o
+ * `SUBIDO` (ya está en S3; el registro puede ir en un lote).
+ */
+export type EstadoArchivo = 'NINGUNO' | 'PENDIENTE' | 'SUBIENDO' | 'SUBIDO';
 
 export type NuevaOperacion = {
   /** UUID creado en el celular; en un registro nuevo es también su `id`. */
@@ -20,9 +27,13 @@ export type NuevaOperacion = {
   datos: Record<string, unknown>;
   /** Texto corto para «Pendientes de envío», p. ej. «Salida · 12,5 bolsas de Cemento IP-30 · P-01». */
   descripcion: string;
+  /** Ruta del archivo guardado en el celular que hay que subir antes de enviar el registro (102). */
+  archivoLocal?: string | null;
 };
 
 export type Operacion = NuevaOperacion & {
+  archivoLocal: string | null;
+  estadoArchivo: EstadoArchivo;
   estado: EstadoOperacion;
   intentos: number;
   /** ISO; `null` = se puede enviar ya. */
@@ -58,6 +69,8 @@ type Fila = {
   respuesta: string | null;
   creada_en: string;
   enviada_en: string | null;
+  archivo_local: string | null;
+  estado_archivo: EstadoArchivo;
 };
 
 function leerJson(texto: string | null): unknown {
@@ -80,6 +93,8 @@ function desdeFila(f: Fila): Operacion {
     obraId: f.obra_id,
     datos: (leerJson(f.datos) ?? {}) as Record<string, unknown>,
     descripcion: f.descripcion,
+    archivoLocal: f.archivo_local,
+    estadoArchivo: f.estado_archivo,
     estado: f.estado,
     intentos: f.intentos,
     proximoIntentoEn: f.proximo_intento_en,
@@ -129,8 +144,9 @@ export async function agregar(nueva: NuevaOperacion, ahora: Date = new Date()): 
   const db = await baseLocal();
   await db.runAsync(
     `INSERT INTO operacion_pendiente
-       (id_operacion, usuario_id, usuario_nombre, tipo, obra_id, datos, descripcion, estado, creada_en)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDIENTE', ?)
+       (id_operacion, usuario_id, usuario_nombre, tipo, obra_id, datos, descripcion, estado, creada_en,
+        archivo_local, estado_archivo)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDIENTE', ?, ?, ?)
      ON CONFLICT (id_operacion) DO NOTHING`,
     nueva.idOperacion,
     nueva.usuarioId,
@@ -140,6 +156,8 @@ export async function agregar(nueva: NuevaOperacion, ahora: Date = new Date()): 
     JSON.stringify(nueva.datos),
     nueva.descripcion,
     ahora.toISOString(),
+    nueva.archivoLocal ?? null,
+    nueva.archivoLocal ? 'PENDIENTE' : 'NINGUNO',
   );
   avisar();
   const guardada = await obtener(nueva.idOperacion);
@@ -187,16 +205,22 @@ export async function pendientesDeOtros(
 }
 
 /**
- * Borra una operación `PENDIENTE` o `RECHAZADO` (criterio 17). Devuelve `false` si no se pudo
+ * Borra una operación `PENDIENTE` o `RECHAZADO` (criterio 17), con su archivo si tiene (102). Devuelve `false` si no se pudo
  * (ya se está enviando, ya se envió o no existe).
  */
 export async function descartar(idOperacion: string): Promise<boolean> {
   const db = await baseLocal();
+  const fila = await db.getFirstAsync<{ archivo_local: string | null }>(
+    "SELECT archivo_local FROM operacion_pendiente WHERE id_operacion = ? AND estado IN ('PENDIENTE', 'RECHAZADO')",
+    idOperacion,
+  );
   const { changes } = await db.runAsync(
     "DELETE FROM operacion_pendiente WHERE id_operacion = ? AND estado IN ('PENDIENTE', 'RECHAZADO')",
     idOperacion,
   );
   if (changes > 0) {
+    // 102, criterio 10: con la operación se borra su archivo del celular.
+    borrarArchivo(fila?.archivo_local);
     avisar();
   }
   return changes > 0;
@@ -204,13 +228,17 @@ export async function descartar(idOperacion: string): Promise<boolean> {
 
 /**
  * Al abrir la app: lo que quedó `ENVIANDO` (la app se cerró a mitad de un envío) vuelve a
- * `PENDIENTE` (es seguro: Sincronización no procesa dos veces el mismo `idOperacion`), y se borran
- * los `ENVIADO` de hace más de 24 h.
+ * `PENDIENTE` (es seguro: Sincronización no procesa dos veces el mismo `idOperacion`), un archivo que
+ * quedó `SUBIENDO` vuelve a `PENDIENTE` (102), y se borran los `ENVIADO` de hace más de 24 h.
  */
 export async function prepararCola(ahora: Date = new Date()): Promise<void> {
   const db = await baseLocal();
   const limite = new Date(ahora.getTime() - HORAS_ENVIADAS * 3_600_000).toISOString();
   await db.runAsync("UPDATE operacion_pendiente SET estado = 'PENDIENTE' WHERE estado = 'ENVIANDO'");
+  // 102: una subida cortada se vuelve a hacer completa (el PUT a la misma clave es idempotente).
+  await db.runAsync(
+    "UPDATE operacion_pendiente SET estado_archivo = 'PENDIENTE' WHERE estado_archivo = 'SUBIENDO'",
+  );
   await db.runAsync(
     "DELETE FROM operacion_pendiente WHERE estado = 'ENVIADO' AND enviada_en < ?",
     limite,
@@ -228,8 +256,9 @@ export async function adelantarPendientes(usuarioId: string): Promise<void> {
 }
 
 /**
- * Toma hasta 20 operaciones `PENDIENTE` del usuario listas para enviar (`proximo_intento_en`
- * vencido o nulo), en el orden en que se registraron, y las marca `ENVIANDO`.
+ * Toma hasta 20 operaciones `PENDIENTE` «livianas listas» del usuario (sin archivo, o con el archivo ya
+ * subido, 102) con `proximo_intento_en` vencido o nulo, en el orden en que se registraron, y las marca
+ * `ENVIANDO`.
  */
 export async function tomarParaEnvio(
   usuarioId: string,
@@ -242,6 +271,7 @@ export async function tomarParaEnvio(
     const filas = await db.getAllAsync<Fila>(
       `SELECT * FROM operacion_pendiente
        WHERE usuario_id = ? AND estado = 'PENDIENTE'
+         AND estado_archivo IN ('NINGUNO', 'SUBIDO')
          AND (proximo_intento_en IS NULL OR proximo_intento_en <= ?)
        ${ORDEN} LIMIT ?`,
       usuarioId,
@@ -291,7 +321,8 @@ export async function marcarRechazada(
   const db = await baseLocal();
   await db.runAsync(
     `UPDATE operacion_pendiente
-     SET estado = 'RECHAZADO', error_codigo = ?, error_mensaje = ?, respuesta = ?, proximo_intento_en = NULL
+     SET estado = 'RECHAZADO', error_codigo = ?, error_mensaje = ?, respuesta = ?, proximo_intento_en = NULL,
+         estado_archivo = CASE estado_archivo WHEN 'SUBIENDO' THEN 'PENDIENTE' ELSE estado_archivo END
      WHERE id_operacion = ?`,
     codigo,
     mensaje,
@@ -312,6 +343,69 @@ export async function marcarParaReintento(
   await db.runAsync(
     `UPDATE operacion_pendiente
      SET estado = 'PENDIENTE', intentos = ?, proximo_intento_en = ?, error_codigo = ?
+     WHERE id_operacion = ?`,
+    intentos,
+    proximoIntentoEn.toISOString(),
+    codigo,
+    idOperacion,
+  );
+  avisar();
+}
+
+/**
+ * Subidor (102): toma la operación `PENDIENTE` más antigua del usuario con el archivo por subir y su
+ * próximo intento vencido, y marca el archivo `SUBIENDO`. `null` si no hay.
+ */
+export async function tomarArchivoParaSubir(usuarioId: string, ahora: Date = new Date()): Promise<Operacion | null> {
+  const db = await baseLocal();
+  let tomada: Operacion | null = null;
+  await db.withTransactionAsync(async () => {
+    const fila = await db.getFirstAsync<Fila>(
+      `SELECT * FROM operacion_pendiente
+       WHERE usuario_id = ? AND estado = 'PENDIENTE' AND estado_archivo = 'PENDIENTE'
+         AND (proximo_intento_en IS NULL OR proximo_intento_en <= ?)
+       ${ORDEN} LIMIT 1`,
+      usuarioId,
+      ahora.toISOString(),
+    );
+    if (fila) {
+      await db.runAsync(
+        "UPDATE operacion_pendiente SET estado_archivo = 'SUBIENDO' WHERE id_operacion = ?",
+        fila.id_operacion,
+      );
+      tomada = { ...desdeFila(fila), estadoArchivo: 'SUBIENDO' };
+    }
+  });
+  if (tomada) {
+    avisar();
+  }
+  return tomada;
+}
+
+/** El archivo ya está en S3: se guarda la `claveArchivo` en `datos` y el registro queda listo para un lote. */
+export async function marcarArchivoSubido(idOperacion: string, datos: Record<string, unknown>): Promise<void> {
+  const db = await baseLocal();
+  await db.runAsync(
+    `UPDATE operacion_pendiente
+     SET estado_archivo = 'SUBIDO', datos = ?, proximo_intento_en = NULL, error_codigo = NULL
+     WHERE id_operacion = ?`,
+    JSON.stringify(datos),
+    idOperacion,
+  );
+  avisar();
+}
+
+/** La subida no se completó: el archivo vuelve a `PENDIENTE` con un intento más y la hora del próximo. */
+export async function marcarArchivoParaReintento(
+  idOperacion: string,
+  intentos: number,
+  proximoIntentoEn: Date,
+  codigo: string | null = null,
+): Promise<void> {
+  const db = await baseLocal();
+  await db.runAsync(
+    `UPDATE operacion_pendiente
+     SET estado_archivo = 'PENDIENTE', intentos = ?, proximo_intento_en = ?, error_codigo = ?
      WHERE id_operacion = ?`,
     intentos,
     proximoIntentoEn.toISOString(),

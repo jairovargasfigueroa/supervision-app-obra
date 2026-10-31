@@ -33,6 +33,22 @@ export const MENSAJE_CONFIRMAR_DESCARTE = '¿Descartar este registro? No se envi
 /** «Pendientes de envío» sin registros (estado vacío; texto de la app, falta en el catálogo). */
 export const MENSAJE_SIN_PENDIENTES = 'No hay registros pendientes de envío.';
 
+/** Descripción de una foto de avance en «Pendientes de envío» (102): «Foto de avance · P-01 · Losa…». */
+export function descripcionFoto(partida?: { codigo: string; nombre: string } | null): string {
+  return partida ? `Foto de avance · ${partida.codigo} · ${partida.nombre}` : 'Foto de avance';
+}
+
+/** Foto subiéndose a S3 en «Pendientes de envío» (102, criterio 7). */
+export const MENSAJE_SUBIENDO_FOTO = 'Subiendo foto…';
+
+/** Con más de estas fotos sin enviar en el celular se avisa (102, criterio 3). */
+export const FOTOS_SIN_ENVIAR_PARA_AVISAR = 100;
+
+/** 102, criterio 3 (no impide tomar más). */
+export function mensajeFotosSinEnviar(n: number): string {
+  return `Tienes ${n} fotos sin enviar; busca señal para enviarlas`;
+}
+
 /** Pendientes de otro usuario en el celular (criterio 15). */
 export function mensajePendientesDeOtro(n: number, nombre: string): string {
   return `Hay ${n} ${n === 1 ? 'registro' : 'registros'} de ${nombre} sin enviar; se enviarán cuando esa persona vuelva a iniciar sesión`;

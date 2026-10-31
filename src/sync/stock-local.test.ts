@@ -10,6 +10,8 @@ function op(id: string, tipo: 'INGRESO' | 'SALIDA', cantidad: number, extra: Par
     obraId: 'o1',
     datos: { id, obraId: 'o1', materialId: 'm1', tipo, cantidad },
     descripcion: '',
+    archivoLocal: null,
+    estadoArchivo: 'NINGUNO',
     estado: 'PENDIENTE',
     intentos: 0,
     proximoIntentoEn: null,

@@ -1,5 +1,5 @@
 import { ErrorApi } from './errores';
-import { leerArchivo, subirArchivo } from './subida';
+import { subirArchivo, TIEMPO_MAXIMO_SUBIDA_MS } from './subida';
 import { simularFetch } from '../pruebas/fetch-simulado';
 
 let red: jest.Mock;
@@ -28,20 +28,11 @@ describe('subirArchivo', () => {
     );
   });
 
+  it('tiene 30 s como máximo (102, criterio 6)', () => {
+    expect(TIEMPO_MAXIMO_SUBIDA_MS).toBe(30_000);
+  });
+
   it('sin señal, ErrorApi red', async () => {
     await expect(subirArchivo('https://s3/firmada', archivo)).rejects.toEqual(new ErrorApi({ tipo: 'red' }));
-  });
-});
-
-describe('leerArchivo', () => {
-  it('lee la foto comprimida del celular', async () => {
-    const blob = { tamano: 2 } as unknown as Blob;
-    red.mockResolvedValue({ blob: () => Promise.resolve(blob) });
-    await expect(leerArchivo('file:///comprimida.jpg')).resolves.toBe(blob);
-    expect(red).toHaveBeenCalledWith('file:///comprimida.jpg');
-  });
-
-  it('si ya no está, ErrorApi archivo', async () => {
-    await expect(leerArchivo('file:///no-existe.jpg')).rejects.toEqual(new ErrorApi({ tipo: 'archivo' }));
   });
 });

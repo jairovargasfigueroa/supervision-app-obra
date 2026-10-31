@@ -11,21 +11,13 @@ import {
   tomarParaEnvio,
   type Operacion,
 } from './cola';
+import { borrarArchivo } from './archivos';
 import { idDispositivo } from './dispositivo';
+import { esperaCreciente } from './espera';
 import { actualizarStockLocal, descargarPaquete } from './paquete';
+import { subirSiguiente } from './subidor';
 
-/** Espera máxima entre intentos: 5 minutos (criterio 12). */
-export const ESPERA_MAXIMA_S = 300;
-
-/**
- * Espera antes del intento siguiente, tras `intentos` fallidos (1, 2, 3…): `min(2^(intentos−1), 300)`
- * segundos por un factor aleatorio entre 0,8 y 1,2, para que los celulares no reintenten todos a la
- * vez (decisión del equipo). `azar` devuelve un número en [0, 1), como `Math.random`.
- */
-export function esperaCreciente(intentos: number, azar: () => number = Math.random): number {
-  const base = Math.min(2 ** Math.max(intentos - 1, 0), ESPERA_MAXIMA_S);
-  return Math.round(base * 1000 * (0.8 + 0.4 * azar()));
-}
+export { ESPERA_MAXIMA_S, esperaCreciente } from './espera';
 
 export type ResumenEnvio = {
   enviadas: number;
@@ -104,6 +96,8 @@ async function aplicarResultado(
 ): Promise<'enviada' | 'rechazada' | 'reintento'> {
   if (resultado?.estado === 'PROCESADO') {
     await marcarEnviada(op.idOperacion, resultado.respuesta, ahora());
+    // 102, criterio 10: el archivo se borra del celular cuando el servidor confirmó el registro.
+    borrarArchivo(op.archivoLocal);
     const stock = op.tipo === 'MOVIMIENTO_MATERIAL' ? stockDe(resultado.respuesta) : null;
     const materialId = op.datos.materialId;
     if (stock && typeof materialId === 'string') {
@@ -157,10 +151,31 @@ async function enviarTodo({
     }
     renovar = false;
 
-    // 2. Hasta 20 listas, en orden, marcadas ENVIANDO.
+    // 2. Hasta 20 livianas listas, en orden, marcadas ENVIANDO (sin archivo o con el archivo ya subido).
     const lote = await tomarParaEnvio(usuarioId, ahora());
     if (lote.length === 0) {
-      break;
+      // 102: sin livianas listas, se sube un archivo (uno a la vez) y se vuelve a mirar las livianas:
+      // así un movimiento nuevo no espera detrás de varias fotos.
+      const subida = await subirSiguiente({ usuarioId, token, idDispositivo: dispositivo, ahora, azar });
+      if (subida.tipo === 'nada') {
+        break;
+      }
+      if (subida.tipo === 'rechazado') {
+        resumen.rechazadas++;
+        continue;
+      }
+      if (subida.tipo === 'reintento') {
+        resumen.reintentos++;
+        if (subida.renovar && !renovadoPor401) {
+          // Sincronización no aceptó el token: se renueva y se sigue (el archivo espera su próximo intento).
+          renovar = true;
+          renovadoPor401 = true;
+          continue;
+        }
+        // El subidor se detiene hasta el próximo envío.
+        break;
+      }
+      continue;
     }
 
     // 3. POST /lotes con el token obtenido (tiempo máximo de 30 s).

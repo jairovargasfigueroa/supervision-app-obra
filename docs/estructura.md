@@ -4,7 +4,7 @@ Obligatorio para todo el código de este proyecto. Instala todo con `npx expo in
 
 ## Librerías
 
-Expo SDK 58, `expo-router`, `react-native-paper` 5 + `react-native-safe-area-context` + `@expo/vector-icons` (MaterialCommunityIcons), `expo-font` + `expo-asset` (lo pide `expo-font`) + `@expo-google-fonts/inter`, `@tanstack/react-query` 5, `@tanstack/react-form` 1 + `zod` 4, `expo-auth-session`, `expo-secure-store`, `expo-crypto`, `expo-image-picker`, `expo-image-manipulator`, `expo-sqlite` (capa 1). Expo Router necesita además `expo-linking`, `expo-constants`, `react-native-screens`, `expo-web-browser` (lo usa `expo-auth-session`) y `react-dom` (dependencia de `@expo/metro-runtime`; fijada en `19.3.0`, la del SDK, porque si npm la elige sola toma una que pide otro React y `npm install` falla con `ERESOLVE`). Pruebas: `jest-expo` + `@testing-library/react-native` 14.
+Expo SDK 58, `expo-router`, `react-native-paper` 5 + `react-native-safe-area-context` + `@expo/vector-icons` (MaterialCommunityIcons), `expo-font` + `expo-asset` (lo pide `expo-font`) + `@expo-google-fonts/inter`, `@tanstack/react-query` 5, `@tanstack/react-form` 1 + `zod` 4, `expo-auth-session`, `expo-secure-store`, `expo-crypto`, `expo-image-picker`, `expo-image-manipulator`, `expo-sqlite` (capa 1), `expo-file-system` (102: la foto se guarda en `documentDirectory/pendientes/` hasta que se sube). Expo Router necesita además `expo-linking`, `expo-constants`, `react-native-screens`, `expo-web-browser` (lo usa `expo-auth-session`) y `react-dom` (dependencia de `@expo/metro-runtime`; fijada en `19.3.0`, la del SDK, porque si npm la elige sola toma una que pide otro React y `npm install` falla con `ERESOLVE`). Pruebas: `jest-expo` + `@testing-library/react-native` 14.
 
 `expo-image-picker` se configura con su *config plugin* en `app.json` → `plugins`: textos de permiso de cámara y fotos en español y `microphonePermission: false` (la app no graba video, así Android no pide el micrófono).
 
@@ -46,13 +46,14 @@ src/
   api/             red.ts (única llamada a fetch), cliente.ts (token, tiempo máximo, X-Request-Id, errores por
                    codigo, URL de cada servicio, validación Zod de la respuesta; QueryClient con reintentos
                    1-2-4 s de las consultas), errores.ts (ErrorApi y textos de docs/mensajes.md),
-                   obras.ts (GET /obras/{id} y fotos, 005), materiales.ts (tipos y respuesta de POST /movimientos), subida.ts (lee la foto y hace el PUT a S3),
+                   materiales.ts (tipos y respuesta de POST /movimientos), subida.ts (PUT de la foto a S3),
                    sincronizacion.ts (101: GET /paquete-datos con X-Dispositivo-Id e If-None-Match, `null` con 304;
-                   POST /lotes con tiempo máximo de 30 s, un resultado por operación)
+                   POST /lotes con tiempo máximo de 30 s, un resultado por operación; 102: POST /fotos/url-subida
+                   con 10 s)
   formularios/     movimiento.esquema.ts (campos y cuerpo de POST /movimientos, Zod), movimiento.ts (avisos de
                    stock superado, con la respuesta o con el stock mostrado), useMovimiento.ts (TanStack Form
                    sobre el paquete local + registro en la cola, 101), foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
-                   foto.envio.ts (envío con reintento y qué hacer tras cada fallo), useFotoAvance.ts (estado de la pantalla)
+                   useFotoAvance.ts (estado de la pantalla; desde la 102 guarda la foto y la pone en la cola)
   componentes/     BarraSuperior.tsx, EncabezadoApp.tsx (barra con sesión: «Cerrar sesión» con aviso de pendientes, 101), PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
                    ObrasAsignadas.tsx (obras del paquete local, con «Sin señal · datos del …»), TituloObra.tsx,
                    AvisoSinSenal.tsx (101), PendientesEnvio.tsx (pantalla «Pendientes de envío», 101), ConObraLocal.tsx (la obra del paquete guardado, 101), FormularioMovimiento.tsx
@@ -60,12 +61,15 @@ src/
                    SelectorMaterial.tsx (con búsqueda), SelectorPartida.tsx
   sync/            (capa 1, 101) dispositivo.ts (idDispositivo: UUID creado una vez y guardado en secure-store),
                    base-local.ts (expo-sqlite: tablas operacion_pendiente y paquete_datos, migraciones por
-                   PRAGMA user_version en una transacción, una sola conexión), paquete.ts (descarga del
+                   PRAGMA user_version en una transacción, una sola conexión; la 2, de la 102, agrega
+                   archivo_local y estado_archivo), paquete.ts (descarga del
                    paquete de datos con la versión guardada, guardado por usuario y lectura), cola.ts
                    (operaciones con su UUID: agregar sin duplicar, listar y contar por usuario, descartar
                    PENDIENTE o RECHAZADO, tomar hasta 20 listas en orden y marcarlas ENVIANDO, marcar
                    ENVIADO / RECHAZADO / reintento; al abrir la app ENVIANDO → PENDIENTE y se borran los
-                   ENVIADO de hace más de 24 h), enviador.ts (envío por lotes con candado, espera creciente),
+                   ENVIADO de hace más de 24 h), archivos.ts (102: foto en documentDirectory/pendientes/,
+                   abrir y borrar), subidor.ts (102: un archivo a la vez, URL nueva y PUT completo a S3),
+                   espera.ts (espera creciente), enviador.ts (envío por lotes con candado, espera creciente),
                    red.ts (NetInfo: conexión = isConnected y internet no inalcanzable), disparadores.ts (al
                    volver la señal, al volver a primer plano, cada 60 s con pendientes), sincronizacion.tsx
                    (SincronizacionProvider y useSincronizacion: contador, red, «Enviar ahora», «Actualizar datos»,
@@ -74,7 +78,8 @@ src/
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
                    estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
-                   sqlite-simulado.ts (expo-sqlite sobre node:sqlite en memoria), imagen-simulada.ts (cámara, galería y compresión)
+                   sqlite-simulado.ts (expo-sqlite sobre node:sqlite en memoria), archivos-simulados.ts
+                   (expo-file-system en memoria), imagen-simulada.ts (cámara, galería y compresión)
   tema.ts
 ```
 
@@ -93,13 +98,11 @@ src/
 ## Foto de avance (005)
 
 - Se llega a `obras/[id]/foto` de dos formas (criterio 1): desde «Mis obras», con el botón «Foto de avance» de cada obra (solo `maestro`), o desde la pestaña «Foto de avance», que lista las mismas obras («Elige la obra») y lleva a la pantalla de la que se pulse. Las dos usan `ObrasAsignadas`: desde la 101, las obras del paquete de datos guardado (obras asignadas en ejecución que Sincronización pide a Obras); con «tirar para actualizar» se vuelve a pedir el paquete y, sin conexión, arriba va «Sin señal · datos del dd/mm hh:mm». Si nunca se descargó: «Necesitas señal la primera vez para descargar tus obras» con «Reintentar».
-- La pantalla carga la obra con `GET /obras/{id}` (partidas en `SelectorPartida`), toma la foto con la cámara (pide el permiso) o la elige de la galería (`expo-image-picker`, `mediaTypes: ['images']`, `quality: 1` para comprimir una sola vez) y la reduce con `expo-image-manipulator` (`ImageManipulator.manipulate` → `resize` del lado más largo a 1600 px si lo pasa → `saveAsync({ compress: 0.8, format: JPEG })`). Las medidas se leen de la imagen cargada por el manipulador, que ya tiene aplicada la orientación.
+- La pantalla carga la obra del paquete guardado con `ConObraLocal` (102; partidas en `SelectorPartida`), toma la foto con la cámara (pide el permiso) o la elige de la galería (`expo-image-picker`, `mediaTypes: ['images']`, `quality: 1` para comprimir una sola vez) y la reduce con `expo-image-manipulator` (`ImageManipulator.manipulate` → `resize` del lado más largo a 1280 px si lo pasa → `saveAsync({ compress: 0.7, format: JPEG })`). Las medidas se leen de la imagen cargada por el manipulador, que ya tiene aplicada la orientación.
 - `tomadaEn`: con la cámara, el momento en que vuelve la foto; de la galería, `DateTimeOriginal` del EXIF (con `OffsetTimeOriginal` si lo trae; si no, en la hora del celular), o el momento actual si no hay fecha válida o es futura.
 - No usa TanStack Form: no hay campos de texto (solo partida y foto). `foto.esquema.ts` (Zod) dice qué falta para enviar y la pantalla lo muestra bajo «Enviar».
 - El `fotoId` (UUID de `expo-crypto`) se crea al tener la foto; una foto nueva es un registro nuevo. La pantalla lleva `key={id}` para empezar de cero en cada obra.
-- «Enviar» (`foto.envio.ts`, con `useMutation` sin reintentos automáticos): `POST /obras/{obraId}/fotos/url-subida` con el `fotoId` → lee el archivo comprimido (`file://`) y lo sube con `PUT` a la URL firmada (`Content-Type: image/jpeg`, sin token, 60 s como máximo) → `POST /obras/{obraId}/fotos` con `{ id: fotoId, partidaId, claveArchivo, tomadaEn }`. `201` y `200` (ya existía, criterio 4) son éxito: «Foto enviada.» y se quita la foto (la siguiente es un registro nuevo); la partida queda elegida.
-- Reintento (criterio 5): lo hecho queda en memoria (`EnvioFoto`: `fotoId`, archivo comprimido, última URL y si ya se subió) hasta que se registra. «Reintentar» sigue desde el paso que falló, con el mismo `fotoId` y el mismo archivo, sin volver a tomar ni comprimir la foto: si ya se subió, solo registra; si la URL vence en menos de 30 s, o S3 rechaza el `PUT` con `403` (URL vencida), pide otra con el mismo `fotoId`.
-- Tras un fallo se muestra «No se pudo enviar.» con el texto de `docs/mensajes.md`, y `decidirTrasFallo` (función pura) elige qué ofrecer: sin señal, tiempo agotado, `429`, `5xx` (también `503 SERVICIO_NO_DISPONIBLE` mientras no exista el bucket) o un rechazo de S3 → «Reintentar»; `422 PARTIDA_NO_ES_DE_LA_OBRA` → «Actualizar datos» y elegir otra partida (mismo `fotoId`); `422 CLAVE_ARCHIVO_INVALIDA`, `413`, `400` o la foto perdida → se descarta la foto para tomar otra; `403` y `404 OBRA_NO_ENCONTRADA` → sin reintento; `401` o sesión terminada → «Iniciar sesión».
+- «Enviar» (102): mueve la foto comprimida a `documentDirectory/pendientes/{fotoId}.jpg` (`sync/archivos.ts`, `expo-file-system`) y la agrega a la cola como `FOTO_AVANCE` (`idOperacion` = `fotoId`; `datos` `{ id, obraId, partidaId, tomadaEn }`; `archivo_local` con la ruta y `estado_archivo` `PENDIENTE`; descripción «Foto de avance · P-01 · Losa de hormigón armado»), dispara el envío y espera hasta 5 s: «Foto enviada.» si quedó `ENVIADO`, el motivo si quedó `RECHAZADO`, si no «Guardado en el celular · se enviará cuando haya señal». La foto se quita (la siguiente es un registro nuevo) y la partida queda elegida. Con más de 100 fotos del usuario sin enviar, arriba de «Enviar»: «Tienes N fotos sin enviar; busca señal para enviarlas» (no impide tomar más).
 
 ## Movimientos de material (004)
 
@@ -121,7 +124,7 @@ src/
 ## Pruebas
 
 `jest-expo` + Testing Library: cliente REST (reintentos de las consultas), cola, enviador y sincronización (101), esquemas Zod, componentes principales. En `rutas.test.tsx`, Sincronización se simula pasando cada operación de `POST /lotes` al `POST /movimientos` simulado.
-- Pruebas de la 101 («Pruebas» del diseño): `sync/cola.test.ts` (orden, filtro por usuario, sin duplicar, descartar, `ENVIANDO` → `PENDIENTE` al iniciar, limpieza a las 24 h), `sync/enviador.test.ts` (espera creciente; con la red simulada: `PROCESADO`, `ERROR`, `REINTENTAR`, fallo del lote, `TOKEN_VENCIDO`, `401` y `400` del lote, lotes de 20, candado), `sync/stock-local.test.ts` (stock con pendientes y estado), `sync/paquete.test.ts` (`If-None-Match`, `304`, fallo), `sync/base-local.test.ts` (migraciones), `sync/sincronizacion.test.tsx` y, de punta a punta en la app, `rutas.test.tsx` (formularios por la cola, sin señal, stock local, «Pendientes de envío», cerrar sesión con pendientes). `npm test`, `npx tsc --noEmit` y `npx expo-doctor` antes de cada commit.
+- Pruebas de la 101 («Pruebas» del diseño): `sync/cola.test.ts` (orden, filtro por usuario, sin duplicar, descartar, `ENVIANDO` → `PENDIENTE` al iniciar, limpieza a las 24 h), `sync/enviador.test.ts` (espera creciente; con la red simulada: `PROCESADO`, `ERROR`, `REINTENTAR`, fallo del lote, `TOKEN_VENCIDO`, `401` y `400` del lote, lotes de 20, candado), `sync/stock-local.test.ts` (stock con pendientes y estado), `sync/paquete.test.ts` (`If-None-Match`, `304`, fallo), `sync/base-local.test.ts` (migraciones), `sync/sincronizacion.test.tsx`, `sync/subidor.test.ts` (102: URL nueva en cada intento, rechazo por `404`, reintento por red, `401`, archivo perdido, `SUBIENDO` → `PENDIENTE`), `formularios/foto.test.ts` (102: 1280 px y 0,7) y, de punta a punta en la app, `rutas.test.tsx` (formularios por la cola, sin señal, stock local, «Pendientes de envío», cerrar sesión con pendientes; 102: foto a la cola, subida y registro, aviso de más de 100 fotos, miniatura y «Subiendo foto…»). En `sync/enviador.test.ts`, el orden livianos antes que archivos y el borrado del archivo solo al confirmar. `npm test`, `npx tsc --noEmit` y `npx expo-doctor` antes de cada commit.
 
 - Las pruebas van junto al archivo que prueban (`formato.test.ts`, `estados.test.tsx`).
 - Las rutas (`src/app/`) se prueban desde fuera de esa carpeta, en `src/rutas.test.tsx`, con `renderRouter('src/app')` de `expo-router/testing-library`: todo archivo dentro de `src/app/` es una pantalla, así que ahí no van pruebas.
@@ -135,7 +138,9 @@ src/
 ## Registro sin señal (101)
 
 - `sync/enviador.ts` (`enviarPendientes`): un solo envío a la vez (candado en memoria; si llega otro pedido durante el envío, se hace otra vuelta al terminar). Por cada vuelta: token vigente (si no se puede renovar por falta de red se detiene sin tocar la cola, `sin-red`; si la sesión terminó, `sin-sesion`) → hasta 20 operaciones `PENDIENTE` listas del usuario, en orden, marcadas `ENVIANDO` → `POST /lotes` (30 s) → por resultado: `PROCESADO` → `ENVIADO` con la respuesta (en un movimiento, el `stock` de la respuesta reemplaza el del paquete local); `ERROR` → `RECHAZADO` con `codigo` (el `detail` o `title` va a `error_mensaje`, solo para soporte); `REINTENTAR` → `PENDIENTE` con un intento más y espera creciente (con `TOKEN_VENCIDO`, el token se renueva antes del siguiente lote con `obtenerToken({ renovar: true })`). Se repite mientras queden listas; si envió alguna, vuelve a pedir el paquete con `If-None-Match`.
-- Espera creciente: `min(2^(intentos−1), 300)` s por un factor aleatorio entre 0,8 y 1,2.
+- Orden de envío (102, criterio 4): el enviador primero manda en lotes las operaciones «livianas listas» (sin archivo, o con el archivo ya `SUBIDO`); cuando no queda ninguna, el subidor sube un solo archivo y el enviador vuelve a las livianas (el registro de esa foto sale en el lote siguiente), hasta que no quede nada listo o el subidor falle (se detiene hasta el próximo envío; con un `401`, renueva el token una vez y sigue). El archivo se borra del celular cuando el registro queda `ENVIADO` o al descartar la operación (`descartar`); una foto `RECHAZADO` lo conserva hasta descartarla.
+- Espera creciente (`sync/espera.ts`): `min(2^(intentos−1), 300)` s por un factor aleatorio entre 0,8 y 1,2.
+- Subidor (102, `sync/subidor.ts`, `subirSiguiente`): toma la operación `PENDIENTE` más antigua del usuario con `estado_archivo` `PENDIENTE` y su próximo intento vencido, la marca `SUBIENDO`, pide a Sincronización `POST /fotos/url-subida { obraId, fotoId }` (10 s; una URL nueva en cada intento) y hace `PUT` del archivo de `pendientes/` (el `File` de expo-file-system como cuerpo, `image/jpeg`, sin token, 30 s). `PUT` correcto → `claveArchivo` en `datos` y `estado_archivo` `SUBIDO`. `4xx` al pedir la URL (salvo `401`, `408` y `429`) → `RECHAZADO` con su `codigo`. Red, tiempo agotado, `5xx`, `401` (pide renovar el token) o fallo del `PUT` → `estado_archivo` `PENDIENTE` con la espera creciente. Si el archivo ya no está en el celular → `RECHAZADO` con el código propio `FOTO_NO_DISPONIBLE` («La foto no se pudo preparar para el envío.»). Al abrir la app, un `SUBIENDO` vuelve a `PENDIENTE`.
 - Sesión sin señal: al entrar (inicio de sesión, apertura o renovación) se guarda el `usuarioLocal` en `expo-secure-store` (`sesion/usuario-local.ts`). Si al abrir la app la renovación falla por la red, se entra con los tokens guardados y el `usuarioLocal` aunque el token haya vencido; los envíos esperan a que se renueve (el enviador se detiene con `sin-red`). Si Keycloak rechaza la renovación, se borran los tokens y el `usuarioLocal` y vuelve el inicio de sesión; la cola no se toca.
 - Cerrar sesión (`EncabezadoApp`): con pendientes del usuario (`PENDIENTE` + `ENVIANDO`), primero el diálogo «¿Cerrar sesión?» con «Tienes N registros sin enviar; se enviarán cuando vuelvas a iniciar sesión con este usuario», «Cancelar» y «Cerrar sesión». Al cerrar se borra el `paquete_datos` del usuario y después tokens y `usuarioLocal` (como en la 001); las operaciones quedan en la cola con su `usuario_id`. Textos de la 101 en `sync/mensajes.ts`.
 - «Registrar con fecha de hoy» (criterio 14b): en un movimiento `RECHAZADO` con `PERIODO_CERRADO` (en «Pendientes de envío» y en el formulario tras el rechazo), `registrarConFechaDeHoy` agrega una operación nueva (UUID nuevo, mismos `datos` con ese `id` y `registradoEn` = ahora, misma descripción), descarta la rechazada y envía; el resultado se muestra como al registrar.

@@ -125,3 +125,32 @@ export async function enviarLote(
   });
   return validar(esquemaRespuestaLote, datos).resultados;
 }
+
+const esquemaUrlSubida = z.looseObject({
+  url: z.string().min(1),
+  claveArchivo: z.string().min(1),
+  expiraEn: z.string(),
+});
+
+export type UrlSubida = z.infer<typeof esquemaUrlSubida>;
+
+/** Tiempo máximo para pedir la URL de subida (102, criterio 6). */
+export const TIEMPO_MAXIMO_URL_SUBIDA_MS = 10_000;
+
+/**
+ * `POST /fotos/url-subida` (102): la URL firmada (`PUT`, vence a los 10 minutos) y la `claveArchivo`
+ * de la foto `fotoId`, que Sincronización pide a Obras. Se pide una nueva en cada intento de subida.
+ */
+export async function pedirUrlSubidaFoto(
+  { obraId, fotoId }: { obraId: string; fotoId: string },
+  { obtenerToken, idDispositivo }: { obtenerToken: ObtenerToken; idDispositivo: string },
+): Promise<UrlSubida> {
+  const { datos } = await pedir(url('/fotos/url-subida'), {
+    obtenerToken,
+    metodo: 'POST',
+    cuerpo: { obraId, fotoId },
+    encabezados: { 'X-Dispositivo-Id': idDispositivo },
+    tiempoMaximoMs: TIEMPO_MAXIMO_URL_SUBIDA_MS,
+  });
+  return validar(esquemaUrlSubida, datos);
+}
