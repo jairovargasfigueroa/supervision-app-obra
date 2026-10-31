@@ -53,11 +53,12 @@ src/
                    pantalla de obra), FormularioMovimiento.tsx (ingreso y salida), StockObra.tsx,
                    SelectorMaterial.tsx (con búsqueda), SelectorPartida.tsx
   sync/            (capa 1, 101) dispositivo.ts (idDispositivo: UUID creado una vez y guardado en secure-store),
-                   cola.ts, base-local.ts
+                   base-local.ts (expo-sqlite: tablas operacion_pendiente y paquete_datos, migraciones por
+                   PRAGMA user_version en una transacción, una sola conexión), cola.ts
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
                    estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
-                   imagen-simulada.ts (cámara, galería y compresión)
+                   sqlite-simulado.ts (expo-sqlite sobre node:sqlite en memoria), imagen-simulada.ts (cámara, galería y compresión)
   tema.ts
 ```
 
@@ -109,5 +110,6 @@ src/
 - Las rutas (`src/app/`) se prueban desde fuera de esa carpeta, en `src/rutas.test.tsx`, con `renderRouter('src/app')` de `expo-router/testing-library`: todo archivo dentro de `src/app/` es una pantalla, así que ahí no van pruebas.
 - `testTimeout` de Jest en 60 s (`package.json`): la primera prueba que monta Expo Router tarda en cargar los módulos.
 - `jest.setup.ts` (en `setupFilesAfterEnv`) simula `expo-secure-store` en memoria (`src/pruebas/secure-store-simulado.ts`, se vacía antes de cada prueba) y `expo-font` (fuentes e íconos dados por cargados), porque en Jest no hay archivos de fuentes reales. También simula `expo-image-picker` y `expo-image-manipulator` (`src/pruebas/imagen-simulada.ts`), `randomUUID` de `expo-crypto` (con el `crypto` de Node), `configuracion()` (lee `app.json`, porque en Jest `expo-constants` no lo trae) y `src/api/red.ts`.
+- `expo-sqlite` se simula con `src/pruebas/sqlite-simulado.ts`: cada base es un SQLite real en memoria de Node (`node:sqlite`), así las pruebas ejecutan el mismo SQL que el celular; las bases se guardan por nombre (volver a abrir conserva los datos) y se vacían antes de cada prueba, junto con la conexión de `base-local.ts` y el `idDispositivo` en memoria.
 - La red se simula en `src/api/red.ts` (`jest.mock`) y no en el `fetch` global, porque Expo vuelve a instalar su `fetch` (`expo/fetch`) al cargar sus módulos dentro de `renderRouter` y pisaría el simulado. Cada prueba le da sus respuestas con `simularFetch()` y `jsonRespuesta()` (`src/pruebas/fetch-simulado.ts`).
 - Compilación sin celular: `npx expo export --platform android`.

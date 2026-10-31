@@ -6,7 +6,7 @@ Marca cada tarea al terminarla (con sus pruebas y su commit).
 
 - [x] Instalar con `npx expo install`: `expo-sqlite`, `@react-native-community/netinfo`; agregar `sincronizacionUrl` en `app.json` → `extra`
 - [x] `idDispositivo` generado una sola vez y guardado en `expo-secure-store`
-- [ ] Base local: tablas `operacion_pendiente` y `paquete_datos` con migraciones por `PRAGMA user_version`
+- [x] Base local: tablas `operacion_pendiente` y `paquete_datos` con migraciones por `PRAGMA user_version`
 - [ ] `src/sync/paquete.ts`: descarga de `GET /paquete-datos` con `If-None-Match`, guardado y lectura del paquete local
 - [ ] `src/sync/cola.ts`: agregar, listar, contar, descartar; `ENVIANDO` → `PENDIENTE` al iniciar; limpieza de enviados a las 24 h
 - [ ] `src/sync/enviador.ts`: lotes de 20, `POST /lotes` con tiempo máximo de 30 s, manejo de `PROCESADO` / `ERROR` / `REINTENTAR`, espera creciente con factor aleatorio, renovación del token

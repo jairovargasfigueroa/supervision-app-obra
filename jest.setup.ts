@@ -14,6 +14,9 @@ jest.mock('expo-font', () => {
 // Almacenamiento cifrado simulado en memoria (se vacía antes de cada prueba).
 jest.mock('expo-secure-store', () => jest.requireActual('./src/pruebas/secure-store-simulado'));
 
+// Base local simulada: SQLite real en memoria de Node (src/pruebas/sqlite-simulado.ts, se vacía antes de cada prueba).
+jest.mock('expo-sqlite', () => jest.requireActual('./src/pruebas/sqlite-simulado'));
+
 // En Jest expo-constants no trae el app.json: la configuración se lee de app.json directamente.
 jest.mock('./src/nucleo/configuracion', () => {
   const real = jest.requireActual<typeof import('./src/nucleo/configuracion')>(
@@ -46,6 +49,8 @@ beforeEach(() => {
   jest.requireMock<typeof import('./src/pruebas/secure-store-simulado')>(
     'expo-secure-store',
   ).reiniciarSecureStore();
+  jest.requireMock<typeof import('./src/pruebas/sqlite-simulado')>('expo-sqlite').reiniciarSqlite();
+  jest.requireActual<typeof import('./src/sync/base-local')>('./src/sync/base-local').olvidarBaseLocal();
   jest.requireActual<typeof import('./src/sync/dispositivo')>('./src/sync/dispositivo').olvidarIdDispositivo();
   jest.requireActual<typeof import('./src/pruebas/imagen-simulada')>(
     './src/pruebas/imagen-simulada',
