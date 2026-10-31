@@ -5,7 +5,7 @@ Requisitos y diseño: `docs/specs/101-registro-sin-senal/` de la carpeta que agr
 Marca cada tarea al terminarla (con sus pruebas y su commit).
 
 - [x] Instalar con `npx expo install`: `expo-sqlite`, `@react-native-community/netinfo`; agregar `sincronizacionUrl` en `app.json` → `extra`
-- [ ] `idDispositivo` generado una sola vez y guardado en `expo-secure-store`
+- [x] `idDispositivo` generado una sola vez y guardado en `expo-secure-store`
 - [ ] Base local: tablas `operacion_pendiente` y `paquete_datos` con migraciones por `PRAGMA user_version`
 - [ ] `src/sync/paquete.ts`: descarga de `GET /paquete-datos` con `If-None-Match`, guardado y lectura del paquete local
 - [ ] `src/sync/cola.ts`: agregar, listar, contar, descartar; `ENVIANDO` → `PENDIENTE` al iniciar; limpieza de enviados a las 24 h

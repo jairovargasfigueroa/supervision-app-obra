@@ -52,7 +52,8 @@ src/
                    ObrasAsignadas.tsx (lista de GET /obras), ConObra.tsx (carga GET /obras/{id} para una
                    pantalla de obra), FormularioMovimiento.tsx (ingreso y salida), StockObra.tsx,
                    SelectorMaterial.tsx (con búsqueda), SelectorPartida.tsx
-  sync/            (capa 1) cola.ts, base-local.ts
+  sync/            (capa 1, 101) dispositivo.ts (idDispositivo: UUID creado una vez y guardado en secure-store),
+                   cola.ts, base-local.ts
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
                    estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),

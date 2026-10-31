@@ -46,6 +46,7 @@ beforeEach(() => {
   jest.requireMock<typeof import('./src/pruebas/secure-store-simulado')>(
     'expo-secure-store',
   ).reiniciarSecureStore();
+  jest.requireActual<typeof import('./src/sync/dispositivo')>('./src/sync/dispositivo').olvidarIdDispositivo();
   jest.requireActual<typeof import('./src/pruebas/imagen-simulada')>(
     './src/pruebas/imagen-simulada',
   ).simularManipulador({ ancho: 4000, alto: 3000 });
