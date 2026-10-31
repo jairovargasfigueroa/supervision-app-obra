@@ -1,6 +1,7 @@
 import {
   adelantarPendientes,
   agregar,
+  corregir,
   contarPendientes,
   descartar,
   listar,
@@ -56,6 +57,17 @@ describe('cola de envíos', () => {
     const conArchivo = await agregar(nueva('f', 'u1', { tipo: 'FOTO_AVANCE', archivoLocal: 'file:///doc/pendientes/f.jpg' }), T0);
     expect(sinArchivo).toMatchObject({ archivoLocal: null, estadoArchivo: 'NINGUNO' });
     expect(conArchivo).toMatchObject({ archivoLocal: 'file:///doc/pendientes/f.jpg', estadoArchivo: 'PENDIENTE' });
+  });
+
+  it('corrige datos y descripción solo mientras está PENDIENTE (103, criterio 5)', async () => {
+    await agregar(nueva('a'), T0);
+    await agregar(nueva('b'), mas(1));
+    await tomarParaEnvio('u1', mas(2), 1); // «a» ENVIANDO
+
+    await expect(corregir('b', { id: 'b', texto: 'nuevo' }, 'Corregida')).resolves.toBe(true);
+    expect(await obtener('b')).toMatchObject({ datos: { id: 'b', texto: 'nuevo' }, descripcion: 'Corregida', estado: 'PENDIENTE' });
+    await expect(corregir('a', { id: 'a' }, 'No')).resolves.toBe(false);
+    expect((await obtener('a'))?.descripcion).toBe(nueva('a').descripcion);
   });
 
   it('el mismo idOperacion dos veces no se duplica', async () => {

@@ -6,8 +6,8 @@ import { baseLocal } from './base-local';
 
 export type EstadoOperacion = 'PENDIENTE' | 'ENVIANDO' | 'ENVIADO' | 'RECHAZADO';
 
-/** Tipos de operación de Sincronización que registra la app (101, 102). */
-export type TipoOperacion = 'MOVIMIENTO_MATERIAL' | 'FOTO_AVANCE';
+/** Tipos de operación de Sincronización que registra la app (101, 102, 103). */
+export type TipoOperacion = 'MOVIMIENTO_MATERIAL' | 'FOTO_AVANCE' | 'ENTRADA_DIARIO';
 
 /**
  * Archivo de la operación (102): `NINGUNO` (sin archivo), `PENDIENTE` (falta subirlo), `SUBIENDO` o
@@ -413,4 +413,26 @@ export async function marcarArchivoParaReintento(
     idOperacion,
   );
   avisar();
+}
+
+/**
+ * Corrige una operación que todavía no salió (103, criterio 5): reemplaza `datos` y `descripcion` en la
+ * misma fila, con el mismo `id`. Solo en `PENDIENTE` (no `ENVIANDO`); devuelve `false` si ya no se puede.
+ */
+export async function corregir(
+  idOperacion: string,
+  datos: Record<string, unknown>,
+  descripcion: string,
+): Promise<boolean> {
+  const db = await baseLocal();
+  const { changes } = await db.runAsync(
+    "UPDATE operacion_pendiente SET datos = ?, descripcion = ? WHERE id_operacion = ? AND estado = 'PENDIENTE'",
+    JSON.stringify(datos),
+    descripcion,
+    idOperacion,
+  );
+  if (changes > 0) {
+    avisar();
+  }
+  return changes > 0;
 }
