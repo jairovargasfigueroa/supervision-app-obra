@@ -57,6 +57,10 @@ src/
                    base-local.ts (expo-sqlite: tablas operacion_pendiente y paquete_datos, migraciones por
                    PRAGMA user_version en una transacción, una sola conexión), paquete.ts (descarga del
                    paquete de datos con la versión guardada, guardado por usuario y lectura), cola.ts
+                   (operaciones con su UUID: agregar sin duplicar, listar y contar por usuario, descartar
+                   PENDIENTE o RECHAZADO, tomar hasta 20 listas en orden y marcarlas ENVIANDO, marcar
+                   ENVIADO / RECHAZADO / reintento; al abrir la app ENVIANDO → PENDIENTE y se borran los
+                   ENVIADO de hace más de 24 h)
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
                    estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
