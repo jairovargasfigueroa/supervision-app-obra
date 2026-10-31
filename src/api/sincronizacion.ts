@@ -79,3 +79,49 @@ export async function pedirPaqueteDatos({
   }
   return validar(esquemaPaqueteDatos, datos);
 }
+
+/** Una operación de `POST /lotes`. */
+export type OperacionLote = {
+  idOperacion: string;
+  tipo: string;
+  /** ISO 8601 con zona. */
+  creadaEn: string;
+  datos: Record<string, unknown>;
+};
+
+export const ESTADOS_RESULTADO = ['PROCESADO', 'ERROR', 'REINTENTAR'] as const;
+
+const esquemaResultadoLote = z.looseObject({
+  idOperacion: z.string(),
+  /** `PROCESADO` (el dueño lo aceptó) · `ERROR` (rechazo definitivo) · `REINTENTAR` (más tarde, mismo id). */
+  estado: z.enum(ESTADOS_RESULTADO),
+  repetida: z.boolean().optional(),
+  status: z.number(),
+  /** Cuerpo del servicio dueño: en `ERROR` y `REINTENTAR`, el Problem Details con `codigo`. */
+  respuesta: z.unknown(),
+});
+
+const esquemaRespuestaLote = z.looseObject({ resultados: z.array(esquemaResultadoLote) });
+
+export type ResultadoLote = z.infer<typeof esquemaResultadoLote>;
+
+/** Tiempo máximo de `POST /lotes` en la app (Sincronización corta el lote a los 20 s). */
+export const TIEMPO_MAXIMO_LOTE_MS = 30_000;
+
+/**
+ * `POST /lotes` (hasta 20 operaciones): un resultado por operación, en el mismo orden. Un fallo del
+ * lote completo (sin señal, tiempo agotado, `5xx`, `401`…) lanza `ErrorApi`.
+ */
+export async function enviarLote(
+  operaciones: OperacionLote[],
+  { obtenerToken, idDispositivo }: { obtenerToken: ObtenerToken; idDispositivo: string },
+): Promise<ResultadoLote[]> {
+  const { datos } = await pedir(url('/lotes'), {
+    obtenerToken,
+    metodo: 'POST',
+    cuerpo: { operaciones },
+    encabezados: { 'X-Dispositivo-Id': idDispositivo },
+    tiempoMaximoMs: TIEMPO_MAXIMO_LOTE_MS,
+  });
+  return validar(esquemaRespuestaLote, datos).resultados;
+}

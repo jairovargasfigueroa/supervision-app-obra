@@ -40,8 +40,11 @@ type ValorSesion = {
   /** Abre el inicio de sesión de Keycloak solo, una vez, al abrir la app sin sesión (criterio 1). */
   iniciarSesionAlAbrir: () => void;
   cerrarSesion: () => Promise<void>;
-  /** Token de acceso vigente (lo renueva si hace falta); `null` si la sesión terminó. */
-  obtenerToken: () => Promise<string | null>;
+  /**
+   * Token de acceso vigente (lo renueva si hace falta, o siempre con `renovar`); `null` si la sesión
+   * terminó.
+   */
+  obtenerToken: (opciones?: { renovar?: boolean }) => Promise<string | null>;
 };
 
 const ContextoSesion = createContext<ValorSesion | null>(null);
@@ -76,13 +79,13 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     setSesion({ estado: 'sin-sesion', motivo });
   }, []);
 
-  const obtenerToken = useCallback((): Promise<string | null> => {
+  const obtenerToken = useCallback((opciones?: { renovar?: boolean }): Promise<string | null> => {
     const tokens = tokensRef.current;
     if (!tokens) {
       return Promise.resolve(null);
     }
     // Una sola renovación a la vez, aunque varias pantallas pidan el token juntas.
-    renovacionRef.current ??= asegurarVigencia(tokens, renovarTokens)
+    renovacionRef.current ??= asegurarVigencia(tokens, renovarTokens, undefined, opciones?.renovar)
       .then(async (resultado) => {
         if (resultado.tipo === 'vencida') {
           await terminar('vencida');

@@ -44,7 +44,8 @@ src/
                    codigo, URL de cada servicio, validación Zod de la respuesta; QueryClient con reintentos
                    1-2-4 s de las consultas y conReintentos para repetir un registro con su id), errores.ts (ErrorApi y textos de docs/mensajes.md),
                    obras.ts, materiales.ts (funciones + queryOptions), subida.ts (lee la foto y hace el PUT a S3),
-                   sincronizacion.ts (101: GET /paquete-datos con X-Dispositivo-Id e If-None-Match, `null` con 304)
+                   sincronizacion.ts (101: GET /paquete-datos con X-Dispositivo-Id e If-None-Match, `null` con 304;
+                   POST /lotes con tiempo máximo de 30 s, un resultado por operación)
   formularios/     movimiento.esquema.ts (campos y cuerpo de POST /movimientos, Zod), movimiento.ts (qué registro
                    se envía y con qué id, avisos de stock superado y periodo cerrado), useMovimiento.ts (TanStack
                    Form + envío), foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
@@ -60,7 +61,7 @@ src/
                    (operaciones con su UUID: agregar sin duplicar, listar y contar por usuario, descartar
                    PENDIENTE o RECHAZADO, tomar hasta 20 listas en orden y marcarlas ENVIANDO, marcar
                    ENVIADO / RECHAZADO / reintento; al abrir la app ENVIANDO → PENDIENTE y se borran los
-                   ENVIADO de hace más de 24 h)
+                   ENVIADO de hace más de 24 h), enviador.ts (envío por lotes con candado, espera creciente)
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
                    estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
@@ -72,7 +73,7 @@ src/
 
 - `keycloak.ts`: descubrimiento del realm (`emisor` de `configuracion.ts`), `AuthRequest` con PKCE `S256` y alcances `openid profile`, canje del código (`exchangeCodeAsync` con `code_verifier`) y renovación (`refreshAsync`). El `redirectUri` es `makeRedirectUri({ scheme: 'appobra', path: 'iniciar-sesion' })`: `exp://localhost:8090/--/iniciar-sesion` en Expo Go y `appobra://iniciar-sesion` en un *development build*. Lleva ruta porque Keycloak rechaza `appobra://` sola (URI sin autoridad, `400`).
 - `tokens.ts`: token de acceso, refresh token y vencimiento en `expo-secure-store`, cada uno en su clave.
-- `sesion.tsx`: al abrir la app lee los tokens guardados y los renueva si vencieron; renueva solo un minuto antes de que venza el token de acceso (dura 5 minutos) y `obtenerToken()` lo renueva si hace falta (una sola renovación a la vez). Si Keycloak rechaza la renovación (error OAuth, p. ej. `invalid_grant`), borra los tokens y vuelve al inicio de sesión con «Tu sesión terminó. Vuelve a iniciar sesión.»; si falla la red, conserva la sesión y reintenta a los 30 s.
+- `sesion.tsx`: al abrir la app lee los tokens guardados y los renueva si vencieron; renueva solo un minuto antes de que venza el token de acceso (dura 5 minutos) y `obtenerToken()` lo renueva si hace falta (una sola renovación a la vez); `obtenerToken({ renovar: true })` lo renueva aunque no venza (101, `TOKEN_VENCIDO` de Sincronización). Si Keycloak rechaza la renovación (error OAuth, p. ej. `invalid_grant`), borra los tokens y vuelve al inicio de sesión con «Tu sesión terminó. Vuelve a iniciar sesión.»; si falla la red, conserva la sesión y reintenta a los 30 s.
 - Cerrar sesión (barra superior y «No tienes acceso»): borra los tokens de `expo-secure-store` y hace `POST` al `end_session_endpoint` del realm con `client_id` y `refresh_token` (cierre por canal trasero, `204`). Así termina la sesión SSO de Keycloak y la próxima vez se pide la contraseña. Sin conexión, los tokens igual se borran del celular.
 - Al abrir la app sin sesión, el inicio de sesión de Keycloak se abre solo una vez (criterio 1); después de cerrar sesión o de una sesión vencida se espera a que el usuario pulse «Iniciar sesión».
 - Roles (`roles.ts`): en la app solo cuentan `maestro` y `almacenero` del token (`realm_access.roles`, `azp = app-obra`); los demás se ignoran. Pestañas: `maestro` → Mis obras, Foto de avance; `almacenero` → Mis obras, Ingreso, Salida, Stock; con los dos, la unión sin repetir Mis obras. La barra superior muestra el `name` del token y «Maestro de obra», «Almacenero» o los dos.
@@ -119,3 +120,9 @@ src/
 - `expo-sqlite` se simula con `src/pruebas/sqlite-simulado.ts`: cada base es un SQLite real en memoria de Node (`node:sqlite`), así las pruebas ejecutan el mismo SQL que el celular; las bases se guardan por nombre (volver a abrir conserva los datos) y se vacían antes de cada prueba, junto con la conexión de `base-local.ts` y el `idDispositivo` en memoria.
 - La red se simula en `src/api/red.ts` (`jest.mock`) y no en el `fetch` global, porque Expo vuelve a instalar su `fetch` (`expo/fetch`) al cargar sus módulos dentro de `renderRouter` y pisaría el simulado. Cada prueba le da sus respuestas con `simularFetch()` y `jsonRespuesta()` (`src/pruebas/fetch-simulado.ts`).
 - Compilación sin celular: `npx expo export --platform android`.
+
+## Registro sin señal (101)
+
+- `sync/enviador.ts` (`enviarPendientes`): un solo envío a la vez (candado en memoria; si llega otro pedido durante el envío, se hace otra vuelta al terminar). Por cada vuelta: token vigente (si no se puede renovar por falta de red se detiene sin tocar la cola, `sin-red`; si la sesión terminó, `sin-sesion`) → hasta 20 operaciones `PENDIENTE` listas del usuario, en orden, marcadas `ENVIANDO` → `POST /lotes` (30 s) → por resultado: `PROCESADO` → `ENVIADO` con la respuesta (en un movimiento, el `stock` de la respuesta reemplaza el del paquete local); `ERROR` → `RECHAZADO` con `codigo` (el `detail` o `title` va a `error_mensaje`, solo para soporte); `REINTENTAR` → `PENDIENTE` con un intento más y espera creciente (con `TOKEN_VENCIDO`, el token se renueva antes del siguiente lote con `obtenerToken({ renovar: true })`). Se repite mientras queden listas; si envió alguna, vuelve a pedir el paquete con `If-None-Match`.
+- Espera creciente: `min(2^(intentos−1), 300)` s por un factor aleatorio entre 0,8 y 1,2.
+- Fallo del lote completo (red, tiempo agotado, `5xx`, `429`…): todas vuelven a `PENDIENTE` con espera creciente y el envío se detiene. Decisiones de implementación (el diseño no las detalla): un `401` del lote renueva el token y lo reenvía una sola vez de inmediato (otro `401` va con espera creciente); `400 LOTE_INVALIDO` y `413` dejan las operaciones del lote `RECHAZADO` con ese código, porque reenviar el mismo lote daría lo mismo.

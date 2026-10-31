@@ -1,7 +1,13 @@
 // Paquete de datos para trabajar sin señal (101, criterios 1 a 5): lo que devuelve
 // `GET /paquete-datos` de Sincronización, guardado en la base local por usuario.
-import { pedirPaqueteDatos, esquemaPaqueteDatos, type PaqueteDatos } from '../api/sincronizacion';
+import {
+  esquemaPaqueteDatos,
+  pedirPaqueteDatos,
+  type PaqueteDatos,
+  type StockPaquete,
+} from '../api/sincronizacion';
 import type { ObtenerToken } from '../api/cliente';
+import type { EstadoStock } from '../api/materiales';
 import { baseLocal } from './base-local';
 import { idDispositivo } from './dispositivo';
 
@@ -97,4 +103,34 @@ export async function descargarPaquete({
     throw new Error('Sincronización respondió «sin cambios» sin un paquete guardado.');
   }
   return { paquete: await guardarPaquete(usuarioId, nuevo, descargadoEn), cambio: true };
+}
+
+/**
+ * Tras un movimiento enviado (diseño, enviador paso 4): reemplaza en el paquete guardado el stock de
+ * ese material en la obra con el `stock` de la respuesta de Materiales. Sin paquete u obra, no hace nada.
+ */
+export async function actualizarStockLocal(
+  usuarioId: string,
+  obraId: string,
+  materialId: string,
+  stock: { cantidad: number; minimo: number; estado: EstadoStock },
+): Promise<void> {
+  const guardado = await leerPaquete(usuarioId);
+  const obra = guardado?.contenido.obras.find((o) => o.id === obraId);
+  if (!guardado || !obra) {
+    return;
+  }
+  const fila: StockPaquete = {
+    materialId,
+    cantidad: stock.cantidad,
+    minimo: stock.minimo,
+    estado: stock.estado,
+  };
+  const indice = obra.stock.findIndex((s) => s.materialId === materialId);
+  if (indice >= 0) {
+    obra.stock[indice] = fila;
+  } else {
+    obra.stock.push(fila);
+  }
+  await guardarPaquete(usuarioId, guardado.contenido, guardado.descargadoEn);
 }

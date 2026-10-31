@@ -9,8 +9,11 @@ import { nuevoUuid } from '../nucleo/uuid';
 import { codigoGenerico, ErrorApi, esReintentable, falloDe } from './errores';
 import { enviar } from './red';
 
-/** `obtenerToken` de `useSesion()`: token vigente o `null` si la sesión terminó. */
-export type ObtenerToken = () => Promise<string | null>;
+/**
+ * `obtenerToken` de `useSesion()`: token vigente o `null` si la sesión terminó. Con `renovar` lo
+ * renueva aunque todavía no venza (p. ej. cuando Sincronización avisa `TOKEN_VENCIDO`).
+ */
+export type ObtenerToken = (opciones?: { renovar?: boolean }) => Promise<string | null>;
 
 /** Tiempo máximo de una llamada a un servicio. */
 export const TIEMPO_MAXIMO_MS = 30_000;
@@ -52,6 +55,7 @@ type Opciones = {
   cuerpo?: unknown;
   /** Encabezados propios del servicio (p. ej. `X-Dispositivo-Id` e `If-None-Match` de Sincronización). */
   encabezados?: Record<string, string>;
+  tiempoMaximoMs?: number;
 };
 
 /**
@@ -62,7 +66,7 @@ type Opciones = {
  */
 export async function pedir<T = unknown>(
   url: string,
-  { obtenerToken, metodo = 'GET', cuerpo, encabezados }: Opciones,
+  { obtenerToken, metodo = 'GET', cuerpo, encabezados, tiempoMaximoMs }: Opciones,
 ): Promise<Respuesta<T>> {
   let token: string | null;
   try {
@@ -86,7 +90,7 @@ export async function pedir<T = unknown>(
       ...(cuerpo === undefined ? {} : { 'Content-Type': 'application/json' }),
     },
     body: cuerpo === undefined ? undefined : JSON.stringify(cuerpo),
-  });
+  }, tiempoMaximoMs);
 
   const datos = await leerJson(respuesta);
   if (!respuesta.ok && respuesta.status !== 304) {
