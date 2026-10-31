@@ -1,11 +1,4 @@
-import { ErrorApi } from '../api/errores';
-import type { FilaStock, RegistroMovimiento } from '../api/materiales';
-import {
-  actualizarFilaStock,
-  avisoSuperaStock,
-  mensajeFalloMovimiento,
-  registroParaEnviar,
-} from './movimiento';
+import { avisoSuperaStock, avisoSuperaStockLocal } from './movimiento';
 import {
   aRegistro,
   esquemaMovimiento,
@@ -85,42 +78,7 @@ describe('cuerpo de POST /movimientos', () => {
   });
 });
 
-describe('registroParaEnviar: el UUID del registro (criterio 6)', () => {
-  const contexto = (pendiente: RegistroMovimiento | null) => ({
-    obraId: 'o1',
-    idFormulario: 'id-formulario',
-    pendiente,
-    ahora: () => new Date('2026-11-15T14:00:00Z'),
-    nuevoId: () => 'id-nuevo',
-  });
-  const datos = valores({ materialId: 'm1', cantidad: '10', partidaId: 'p1' });
-
-  it('el primer envío usa el UUID creado al abrir el formulario', () => {
-    expect(registroParaEnviar('SALIDA', datos, contexto(null))).toMatchObject({
-      id: 'id-formulario',
-      registradoEn: '2026-11-15T14:00:00.000Z',
-    });
-  });
-
-  it('volver a enviar lo mismo repite el registro pendiente: mismo id y misma fecha', () => {
-    const pendiente = registroParaEnviar('SALIDA', datos, {
-      ...contexto(null),
-      ahora: () => new Date('2026-11-15T13:00:00Z'),
-    });
-    const repetido = registroParaEnviar('SALIDA', valores({ ...datos, cantidad: '10,000' }), contexto(pendiente));
-    expect(repetido).toBe(pendiente);
-  });
-
-  it('si cambiaron los datos, es otro registro con otro id', () => {
-    const pendiente = registroParaEnviar('SALIDA', datos, contexto(null));
-    expect(registroParaEnviar('SALIDA', valores({ ...datos, cantidad: '11' }), contexto(pendiente))).toMatchObject({
-      id: 'id-nuevo',
-      cantidad: 11,
-    });
-  });
-});
-
-describe('avisos (criterios 5 y 7)', () => {
+describe('aviso de stock superado (criterios 5 y 10)', () => {
   const cemento = { unidad: 'bolsa', unidadPlural: 'bolsas' };
   const stock = (cantidad: number) => ({ cantidad, minimo: 100, estado: 'BAJO' as const });
 
@@ -138,26 +96,11 @@ describe('avisos (criterios 5 y 7)', () => {
     expect(avisoSuperaStock({ tipo: 'INGRESO', cantidad: 5 }, { superaStock: true, stock: stock(10) }, cemento)).toBeNull();
   });
 
-  it('periodo cerrado con el mes del movimiento en La Paz', () => {
-    const cerrado = new ErrorApi({ tipo: 'http', estado: 409, codigo: 'PERIODO_CERRADO' });
-    expect(mensajeFalloMovimiento(cerrado, { registradoEn: '2026-12-01T02:00:00Z' })).toBe(
-      'El periodo 2026-11 ya está cerrado',
+  it('sin señal: compara con el stock que mostraba la app (101, criterio 10)', () => {
+    expect(avisoSuperaStockLocal({ tipo: 'SALIDA', cantidad: 12.5 }, 8, cemento)).toBe(
+      'La salida supera el stock registrado (stock: 8 bolsas). Queda como alerta para revisión',
     );
-    const inactivo = new ErrorApi({ tipo: 'http', estado: 422, codigo: 'MATERIAL_INACTIVO' });
-    expect(mensajeFalloMovimiento(inactivo, { registradoEn: '2026-11-15T14:00:00Z' })).toBe(
-      'El material está desactivado; no se puede usar en movimientos ni fijarle un mínimo.',
-    );
-  });
-});
-
-describe('stock tras registrar (criterio 4)', () => {
-  it('actualiza solo la fila del material', () => {
-    const filas: FilaStock[] = [
-      { materialId: 'm1', codigo: 'CEM', nombre: 'Cemento', unidad: 'bolsa', unidadPlural: 'bolsas', cantidad: 120, minimo: 100, estado: 'JUSTO' },
-      { materialId: 'm2', codigo: 'FIE', nombre: 'Fierro', unidad: 'barra', unidadPlural: 'barras', cantidad: 50, minimo: 10, estado: 'OK' },
-    ];
-    const nuevas = actualizarFilaStock(filas, 'm1', { cantidad: 90, minimo: 100, estado: 'BAJO' });
-    expect(nuevas[0]).toMatchObject({ cantidad: 90, estado: 'BAJO' });
-    expect(nuevas[1]).toBe(filas[1]);
+    expect(avisoSuperaStockLocal({ tipo: 'SALIDA', cantidad: 8 }, 8, cemento)).toBeNull();
+    expect(avisoSuperaStockLocal({ tipo: 'INGRESO', cantidad: 50 }, 8, cemento)).toBeNull();
   });
 });

@@ -47,8 +47,9 @@ beforeEach(() => {
   obras = { 'GET /obras': () => jsonRespuesta(200, []) };
   fetchMock = simularFetch();
   fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
-    // Obras (8081) y Materiales (8082) no comparten rutas: la clave es la ruta sin el servidor.
-    const clave = `${init.method ?? 'GET'} ${url.replace(/^http:\/\/localhost:808[12]/, '')}`;
+    // Obras (8081), Materiales (8082) y Sincronización (8084) no comparten rutas: la clave es la ruta
+    // sin el servidor.
+    const clave = `${init.method ?? 'GET'} ${url.replace(/^http:\/\/localhost:808[124]/, '')}`;
     const manejador = obras[clave];
     return manejador ? manejador(init) : jsonRespuesta(404, { codigo: 'RUTA_NO_ENCONTRADA' });
   });
@@ -451,38 +452,53 @@ describe('enviar la foto de avance (005)', () => {
   });
 });
 
-describe('ingreso y salida de material (004)', () => {
-  const MATERIALES = '/materiales?soloActivos=true&pagina=1&tamano=100';
-  const CEMENTO = {
-    id: 'm1', codigo: 'CEM-IP30', nombre: 'Cemento IP-30', tipo: 'CEMENTO',
-    unidad: 'bolsa', unidadPlural: 'bolsas', precioReferencial: 62, activo: true, atributos: [],
-  };
-  const FILA_CEMENTO = {
-    materialId: 'm1', codigo: 'CEM-IP30', nombre: 'Cemento IP-30', unidad: 'bolsa',
-    unidadPlural: 'bolsas', cantidad: 120, minimo: 100, estado: 'JUSTO',
-  };
+describe('ingreso y salida de material (004, con la cola de la 101)', () => {
+  const CEMENTO = { id: 'm1', codigo: 'CEM-IP30', nombre: 'Cemento IP-30', unidad: 'bolsa', unidadPlural: 'bolsas' };
   const cuerpo = (init: RequestInit) => JSON.parse(String(init.body));
-  let movimientos: { cuerpo: Record<string, unknown>; init: RequestInit }[];
+  let movimientos: { cuerpo: Record<string, unknown> }[];
+  let lotes: RequestInit[];
   let stockActual: number;
+
+  /** Paquete de datos que arma Sincronización con lo que hay en Obras y Materiales. */
+  const paquete = () => ({
+    versionDatos: `v-${stockActual}`,
+    generadoEn: '2026-11-15T13:00:00Z',
+    obras: [{ ...DETALLE, stock: [{ materialId: 'm1', cantidad: stockActual, minimo: 100, estado: 'JUSTO' as const }] }],
+    materiales: [CEMENTO],
+  });
 
   beforeEach(() => {
     movimientos = [];
+    lotes = [];
     stockActual = 120;
-    obras['GET /obras/o1'] = () => jsonRespuesta(200, DETALLE);
-    obras[`GET ${MATERIALES}`] = () =>
-      jsonRespuesta(200, { items: [CEMENTO], total: 1, pagina: 1, tamano: 100 });
-    obras['GET /obras/o1/stock'] = () => jsonRespuesta(200, [{ ...FILA_CEMENTO, cantidad: stockActual }]);
+    obras['GET /paquete-datos'] = (init) => {
+      const version = (init.headers as Record<string, string>)['If-None-Match'];
+      return version === `"v-${stockActual}"` ? new Response(null, { status: 304 }) : jsonRespuesta(200, paquete());
+    };
+    // Materiales, detrás de Sincronización.
     obras['POST /movimientos'] = (init) => {
       const datos = cuerpo(init);
       const previo = stockActual;
       stockActual += datos.tipo === 'INGRESO' ? datos.cantidad : -datos.cantidad;
-      movimientos.push({ cuerpo: datos, init });
+      movimientos.push({ cuerpo: datos });
       return jsonRespuesta(201, {
         id: datos.id,
         periodo: '2026-11',
         superaStock: datos.tipo === 'SALIDA' && previo < datos.cantidad,
         stock: { cantidad: stockActual, minimo: 100, estado: stockActual < 100 ? 'BAJO' : 'OK' },
       });
+    };
+    // Sincronización: cada operación va a POST /movimientos; 2xx → PROCESADO, 4xx → ERROR, si no REINTENTAR.
+    obras['POST /lotes'] = async (init) => {
+      lotes.push(init);
+      const resultados = [];
+      for (const op of cuerpo(init).operaciones) {
+        const respuesta = await obras['POST /movimientos']!({ method: 'POST', body: JSON.stringify(op.datos) });
+        const json = await respuesta.json();
+        const estado = respuesta.ok ? 'PROCESADO' : respuesta.status < 500 ? 'ERROR' : 'REINTENTAR';
+        resultados.push({ idOperacion: op.idOperacion, estado, repetida: false, status: respuesta.status, respuesta: json });
+      }
+      return jsonRespuesta(200, { resultados });
     };
   });
 
@@ -492,7 +508,7 @@ describe('ingreso y salida de material (004)', () => {
     await screen.findByText('CEM-IP30 · Cemento IP-30');
   };
 
-  it('ingreso: material, cantidad y nota de remisión → «Registrado» y el stock se actualiza (criterios 2 y 4)', async () => {
+  it('ingreso: pasa por la cola y Sincronización → «Registrado» y el stock se actualiza (criterios 2, 4 y 8)', async () => {
     await abrir('/obras/o1/ingreso');
     await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
     expect(await screen.findByText('Stock: 120 bolsas')).toBeTruthy();
@@ -502,7 +518,7 @@ describe('ingreso y salida de material (004)', () => {
 
     expect(await screen.findByText('Registrado')).toBeTruthy();
     expect(movimientos).toHaveLength(1);
-    const [{ cuerpo: enviado, init }] = movimientos;
+    const [{ cuerpo: enviado }] = movimientos;
     expect(enviado).toEqual({
       id: expect.stringMatching(/^[0-9a-f-]{36}$/),
       obraId: 'o1',
@@ -512,19 +528,30 @@ describe('ingreso y salida de material (004)', () => {
       notaRemision: { numero: 'NR-00123' },
       registradoEn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
     });
-    expect(init.headers).toMatchObject({ Authorization: expect.stringMatching(/^Bearer /) });
+    expect(cuerpo(lotes[0]).operaciones[0]).toMatchObject({ idOperacion: enviado.id, tipo: 'MOVIMIENTO_MATERIAL' });
+    expect(lotes[0].headers).toMatchObject({
+      Authorization: expect.stringMatching(/^Bearer /),
+      'X-Dispositivo-Id': expect.stringMatching(/^[0-9a-f-]{36}$/),
+    });
+    const [enCola] = await listar('id-usuario1');
+    expect(enCola).toMatchObject({
+      estado: 'ENVIADO',
+      descripcion: 'Ingreso · 12,5 bolsas de Cemento IP-30',
+      usuarioNombre: 'Juan Pérez',
+    });
     // El formulario queda listo para otro registro; el stock del material ya es el nuevo.
     await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
     expect(await screen.findByText('Stock: 132,5 bolsas')).toBeTruthy();
   });
 
-  it('salida sin partida no se envía y pide elegirla (criterio 3)', async () => {
+  it('salida sin partida no se registra y pide elegirla (criterio 3)', async () => {
     await abrir('/obras/o1/salida');
     await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
     await fireEvent.changeText(screen.getByLabelText('Cantidad'), '10');
     await fireEvent.press(screen.getByRole('button', { name: /Registrar salida/ }));
     expect(await screen.findByText('Elige la partida de destino.')).toBeTruthy();
     expect(movimientos).toHaveLength(0);
+    await expect(listar('id-usuario1')).resolves.toEqual([]);
   });
 
   it('salida mayor al stock: se registra igual y muestra el aviso (criterio 5)', async () => {
@@ -541,69 +568,81 @@ describe('ingreso y salida de material (004)', () => {
     ).toBeTruthy();
     expect(movimientos[0].cuerpo).toMatchObject({ tipo: 'SALIDA', cantidad: 12.5, partidaId: 'p2' });
     expect(movimientos[0].cuerpo).not.toHaveProperty('notaRemision');
+    expect((await listar('id-usuario1'))[0].descripcion).toBe('Salida · 12,5 bolsas de Cemento IP-30 · P-02');
   });
 
-  it('periodo cerrado: lo rechaza con el periodo del movimiento (criterio 7)', async () => {
+  it('periodo cerrado: queda «Rechazado» con el periodo del movimiento (criterios 7 y 14)', async () => {
     obras['POST /movimientos'] = () =>
-      jsonRespuesta(409, { status: 409, codigo: 'PERIODO_CERRADO' }, 'application/problem+json');
+      jsonRespuesta(
+        409,
+        { status: 409, codigo: 'PERIODO_CERRADO', detail: 'El periodo 2026-10 ya está cerrado.' },
+        'application/problem+json',
+      );
     await abrir('/obras/o1/ingreso');
     await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
     await fireEvent.changeText(screen.getByLabelText('Cantidad'), '5');
     await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
     expect(await screen.findByText(/^El periodo \d{4}-\d{2} ya está cerrado$/)).toBeTruthy();
     expect(screen.queryByText('Registrado')).toBeNull();
+    expect((await listar('id-usuario1'))[0]).toMatchObject({ estado: 'RECHAZADO', errorCodigo: 'PERIODO_CERRADO' });
   });
 
-  it('si Materiales responde 503, reintenta solo con el mismo id y un 200 cuenta como registrado (criterio 6)', async () => {
-    const ids: string[] = [];
-    obras['POST /movimientos'] = (init) => {
-      const datos = cuerpo(init);
-      ids.push(datos.id);
-      return ids.length === 1
-        ? jsonRespuesta(503, { codigo: 'SERVICIO_NO_DISPONIBLE' }, 'application/problem+json')
-        : jsonRespuesta(200, {
-            id: datos.id, periodo: '2026-11', superaStock: false,
-            stock: { cantidad: 125, minimo: 100, estado: 'JUSTO' },
-          });
-    };
-    await abrir('/obras/o1/ingreso');
+  it('sin señal: «Guardado en el celular», el stock incluye la salida y el siguiente registro es otro (criterios 8 a 10)', async () => {
+    await abrir('/obras/o1/salida');
+    obras['POST /lotes'] = () => Promise.reject(new TypeError('Network request failed'));
     await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
-    await fireEvent.changeText(screen.getByLabelText('Cantidad'), '5');
-    await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
-    expect(await screen.findByText('Registrado', {}, { timeout: 5000 })).toBeTruthy();
-    expect(ids).toHaveLength(2);
-    expect(ids[1]).toBe(ids[0]);
-  });
+    await fireEvent.changeText(screen.getByLabelText('Cantidad'), '130');
+    await fireEvent.press(screen.getByText('P-01 · Losa de hormigón armado'));
+    await fireEvent.press(screen.getByRole('button', { name: /Registrar salida/ }));
 
-  it('tras un fallo, «Registrar» de nuevo repite el mismo registro (mismo id)', async () => {
-    const ids: string[] = [];
-    const registrar = obras['POST /movimientos']!;
-    obras['POST /movimientos'] = (init) => {
-      ids.push(cuerpo(init).id);
-      return jsonRespuesta(500, { codigo: 'ERROR_INTERNO' }, 'application/problem+json');
-    };
-    await abrir('/obras/o1/ingreso');
-    await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
-    await fireEvent.changeText(screen.getByLabelText('Cantidad'), '5');
-    await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
+    expect(await screen.findByText('Guardado en el celular · se enviará cuando haya señal')).toBeTruthy();
     expect(
-      await screen.findByText('Ocurrió un error inesperado. Intenta de nuevo; si se repite, avisa a soporte.'),
+      screen.getByText('La salida supera el stock registrado (stock: 120 bolsas). Queda como alerta para revisión'),
     ).toBeTruthy();
-
-    obras['POST /movimientos'] = (init) => {
-      ids.push(cuerpo(init).id);
-      return registrar(init);
-    };
-    await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
-    expect(await screen.findByText('Registrado')).toBeTruthy();
-    expect(ids).toEqual([ids[0], ids[0]]);
-
-    // El siguiente registro lleva otro id.
+    expect(movimientos).toHaveLength(0);
     await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
+    expect(await screen.findByText('Stock: -10 bolsas')).toBeTruthy();
+
     await fireEvent.changeText(screen.getByLabelText('Cantidad'), '2');
+    await fireEvent.press(screen.getByText('P-01 · Losa de hormigón armado'));
+    await fireEvent.press(screen.getByRole('button', { name: /Registrar salida/ }));
+    // Al quedar guardado, el formulario se vacía para el siguiente.
+    await waitFor(() => expect(screen.getByLabelText('Cantidad').props.value).toBe(''));
+    const [primero, segundo] = await listar('id-usuario1');
+    expect(primero.estado).toBe('PENDIENTE');
+    expect(segundo.idOperacion).not.toBe(primero.idOperacion);
+  });
+
+  it('si Materiales no está disponible queda en el celular para reintentarlo con el mismo id (criterios 12 y 13)', async () => {
+    obras['POST /movimientos'] = () =>
+      jsonRespuesta(503, { status: 503, codigo: 'SERVICIO_NO_DISPONIBLE' }, 'application/problem+json');
+    await abrir('/obras/o1/ingreso');
+    await fireEvent.press(screen.getByText('CEM-IP30 · Cemento IP-30'));
+    await fireEvent.changeText(screen.getByLabelText('Cantidad'), '5');
     await fireEvent.press(screen.getByRole('button', { name: /Registrar ingreso/ }));
-    await waitFor(() => expect(ids).toHaveLength(3));
-    expect(ids[2]).not.toBe(ids[0]);
+
+    expect(await screen.findByText('Guardado en el celular · se enviará cuando haya señal')).toBeTruthy();
+    const [op] = await listar('id-usuario1');
+    expect(op).toMatchObject({ estado: 'PENDIENTE', intentos: 1, errorCodigo: 'SERVICIO_NO_DISPONIBLE' });
+    expect(op.datos.id).toBe(op.idOperacion);
+  });
+
+  it('con los datos guardados funciona sin señal (criterio 3)', async () => {
+    await guardarPaquete('id-usuario1', paquete(), '2026-11-15T13:00:00Z');
+    obras = {};
+    await guardarTokens(sesionDe(['almacenero']));
+    await renderRouter('src/app', { initialUrl: '/obras/o1/ingreso' });
+    expect(await screen.findByText('CEM-IP30 · Cemento IP-30', {}, { timeout: 5000 })).toBeTruthy();
+    expect(screen.getByText('Edificio Las Palmas')).toBeTruthy();
+  });
+
+  it('el primer uso sin señal pide señal para descargar las obras (criterio 4)', async () => {
+    obras = {};
+    await guardarTokens(sesionDe(['almacenero']));
+    await renderRouter('src/app', { initialUrl: '/obras/o1/ingreso' });
+    expect(
+      await screen.findByText('Necesitas señal la primera vez para descargar tus obras', {}, { timeout: 5000 }),
+    ).toBeTruthy();
   });
 });
 

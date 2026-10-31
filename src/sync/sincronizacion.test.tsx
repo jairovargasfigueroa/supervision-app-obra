@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, render, screen, waitFor } from '@testing-library/react-native';
 import { Text } from 'react-native';
 
@@ -44,10 +45,25 @@ function servidorQueProcesa() {
 
 const montar = () =>
   render(
-    <SincronizacionProvider usuario={usuario} obtenerToken={obtenerToken}>
-      <Consumidor />
-    </SincronizacionProvider>,
+    <QueryClientProvider client={new QueryClient()}>
+      <SincronizacionProvider usuario={usuario} obtenerToken={obtenerToken}>
+        <Consumidor />
+      </SincronizacionProvider>
+    </QueryClientProvider>,
   );
+
+/** Espera (con tiempo real) a que se cumpla una condición que lee la base local. */
+async function hasta(condicion: () => Promise<boolean>, ms = 3000): Promise<void> {
+  const fin = Date.now() + ms;
+  while (!(await condicion())) {
+    if (Date.now() > fin) {
+      throw new Error('No se cumplió a tiempo');
+    }
+    await act(async () => {
+      await new Promise((listo) => setTimeout(listo, 20));
+    });
+  }
+}
 
 beforeEach(() => {
   jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -62,22 +78,37 @@ describe('SincronizacionProvider', () => {
 
     await montar();
 
-    await waitFor(async () => expect((await obtener('a'))?.estado).toBe('ENVIADO'));
+    await hasta(async () => (await obtener('a'))?.estado === 'ENVIADO');
     expect(red.mock.calls.some(([u]) => String(u).endsWith('/lotes'))).toBe(true);
     await waitFor(() => expect(screen.getByText('pendientes:0')).toBeTruthy());
   });
 
-  it('registrar guarda con el usuario de la sesión y dispara el envío', async () => {
+  it('registrar guarda con el usuario de la sesión, envía y devuelve cómo quedó', async () => {
     servidorQueProcesa();
     await montar();
 
+    let resultado: Awaited<ReturnType<typeof valor.registrar>> | undefined;
     await act(async () => {
-      await valor.registrar(registro('b'));
+      resultado = await valor.registrar(registro('b'));
     });
 
-    const [guardada] = await listar('u1');
-    expect(guardada).toMatchObject({ idOperacion: 'b', usuarioId: 'u1', usuarioNombre: 'Ana Almacenera' });
-    await waitFor(async () => expect((await obtener('b'))?.estado).toBe('ENVIADO'));
+    expect(resultado).toMatchObject({ idOperacion: 'b', usuarioId: 'u1', usuarioNombre: 'Ana Almacenera', estado: 'ENVIADO' });
+    expect((await listar('u1')).map((o) => o.idOperacion)).toEqual(['b']);
+  });
+
+  it('sin respuesta en el plazo, registrar devuelve la operación todavía pendiente', async () => {
+    // Sincronización tarda más que el plazo del registro.
+    simularFetch().mockImplementation(
+      () => new Promise<Response>((listo) => setTimeout(() => listo(jsonRespuesta(503, { codigo: 'SERVICIO_NO_DISPONIBLE' })), 300)),
+    );
+    await montar();
+
+    let resultado: Awaited<ReturnType<typeof valor.registrar>> | undefined;
+    await act(async () => {
+      resultado = await valor.registrar(registro('e'), 50);
+    });
+    expect(resultado?.estado).toBe('ENVIANDO');
+    await hasta(async () => (await obtener('e'))?.estado === 'PENDIENTE');
   });
 
   it('sin señal el registro queda en la cola y el contador lo muestra', async () => {

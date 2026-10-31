@@ -5,15 +5,18 @@ import { RadioButton, Searchbar } from 'react-native-paper';
 import type { Material } from '../api/materiales';
 import { radios } from '../tema';
 
+/** Lo que el selector necesita de un material (del catálogo o del paquete de datos sin señal). */
+type MaterialElegible = Pick<Material, 'id' | 'codigo' | 'nombre'>;
+
 type Props = {
-  materiales: readonly Material[];
+  materiales: readonly MaterialElegible[];
   valor: string;
   onCambiar: (materialId: string) => void;
   deshabilitado?: boolean;
 };
 
 /** Parte del código o del nombre, sin distinguir mayúsculas ni tildes (como la búsqueda del catálogo). */
-export function filtrarMateriales(materiales: readonly Material[], busqueda: string): Material[] {
+export function filtrarMateriales<M extends MaterialElegible>(materiales: readonly M[], busqueda: string): M[] {
   const normalizar = (texto: string) =>
     texto.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const buscado = normalizar(busqueda.trim());

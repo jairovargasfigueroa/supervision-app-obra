@@ -125,51 +125,6 @@ export function esperaReintento(intento: number): number {
   return 1000 * 2 ** intento;
 }
 
-/**
- * Reintentos de un registro (diseño 004, «App»): hasta 3, a 1 s, 2 s y 4 s, solo ante un error de
- * red (sin respuesta o tiempo agotado) o `503`. Se puede repetir porque el registro lleva su `id`
- * (UUID del celular) y el servicio no lo procesa dos veces (`200` con el existente).
- */
-export const MAX_REINTENTOS_ENVIO = 3;
-
-export function reintentarEnvio(intentosFallidos: number, error: unknown): boolean {
-  if (intentosFallidos >= MAX_REINTENTOS_ENVIO) {
-    return false;
-  }
-  const fallo = falloDe(error);
-  return fallo.tipo === 'red' || fallo.tipo === 'tiempo' || (fallo.tipo === 'http' && fallo.estado === 503);
-}
-
-const dormir = (ms: number) => new Promise<void>((listo) => setTimeout(listo, ms));
-
-type OpcionesReintento = {
-  /** Si vale la pena otro intento tras `intentosFallidos` fallos. */
-  reintentar?: (intentosFallidos: number, error: unknown) => boolean;
-  /** Espera entre intentos (las pruebas la reemplazan para no esperar de verdad). */
-  esperar?: (ms: number) => Promise<void>;
-};
-
-/**
- * Repite `operacion` mientras `reintentar` lo diga, esperando 1 s, 2 s y 4 s. `operacion` debe
- * enviar siempre lo mismo (mismo cuerpo y mismo `id`): así un intento que sí llegó al servicio no
- * crea un registro nuevo. Si se acaban los intentos, lanza el último error.
- */
-export async function conReintentos<T>(
-  operacion: () => Promise<T>,
-  { reintentar = reintentarEnvio, esperar = dormir }: OpcionesReintento = {},
-): Promise<T> {
-  for (let fallidos = 0; ; fallidos++) {
-    try {
-      return await operacion();
-    } catch (error) {
-      if (!reintentar(fallidos, error)) {
-        throw error;
-      }
-      await esperar(esperaReintento(fallidos));
-    }
-  }
-}
-
 export type Servicio = 'obras' | 'materiales' | 'sincronizacion';
 
 /**
@@ -187,8 +142,8 @@ export function urlServicio(servicio: Servicio, ruta: string): string {
 }
 
 /**
- * Cliente de TanStack Query de la app. Las escrituras no se reintentan solas: las que se pueden
- * repetir sin duplicar (un movimiento con su `id`) usan `conReintentos` dentro de su función.
+ * Cliente de TanStack Query de la app. Las escrituras no se reintentan solas (los movimientos pasan
+ * por la cola de la 101, que los reintenta con su `id`).
  */
 export function crearClienteConsultas(): QueryClient {
   return new QueryClient({

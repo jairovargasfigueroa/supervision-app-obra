@@ -1,4 +1,5 @@
 import { Stack } from 'expo-router';
+import { useMemo } from 'react';
 
 import { EncabezadoApp } from '../../componentes/EncabezadoApp';
 import { PANTALLAS_OBRA, tieneAlgunRol } from '../../sesion/roles';
@@ -16,6 +17,10 @@ export default function AppLayout() {
   const { sesion, obtenerToken } = useSesion();
   const usuario = sesion.estado === 'activa' ? sesion.usuario : null;
   const roles = usuario?.roles ?? [];
+  const usuarioSync = useMemo(
+    () => (usuario ? { id: usuario.id, nombre: usuario.nombre } : null),
+    [usuario?.id, usuario?.nombre], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 
   const pila = (
     <Stack
@@ -34,15 +39,11 @@ export default function AppLayout() {
     </Stack>
   );
 
-  if (!usuario) {
+  if (!usuarioSync) {
     return pila;
   }
   return (
-    <SincronizacionProvider
-      key={usuario.id}
-      usuario={{ id: usuario.id, nombre: usuario.nombre }}
-      obtenerToken={obtenerToken}
-    >
+    <SincronizacionProvider key={usuarioSync.id} usuario={usuarioSync} obtenerToken={obtenerToken}>
       {pila}
     </SincronizacionProvider>
   );

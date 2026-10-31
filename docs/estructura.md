@@ -44,17 +44,18 @@ src/
                    usuario-local.ts (101: último usuario { id, nombre, usuario, roles } en secure-store)
   api/             red.ts (única llamada a fetch), cliente.ts (token, tiempo máximo, X-Request-Id, errores por
                    codigo, URL de cada servicio, validación Zod de la respuesta; QueryClient con reintentos
-                   1-2-4 s de las consultas y conReintentos para repetir un registro con su id), errores.ts (ErrorApi y textos de docs/mensajes.md),
+                   1-2-4 s de las consultas), errores.ts (ErrorApi y textos de docs/mensajes.md),
                    obras.ts, materiales.ts (funciones + queryOptions), subida.ts (lee la foto y hace el PUT a S3),
                    sincronizacion.ts (101: GET /paquete-datos con X-Dispositivo-Id e If-None-Match, `null` con 304;
                    POST /lotes con tiempo máximo de 30 s, un resultado por operación)
-  formularios/     movimiento.esquema.ts (campos y cuerpo de POST /movimientos, Zod), movimiento.ts (qué registro
-                   se envía y con qué id, avisos de stock superado y periodo cerrado), useMovimiento.ts (TanStack
-                   Form + envío), foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
+  formularios/     movimiento.esquema.ts (campos y cuerpo de POST /movimientos, Zod), movimiento.ts (avisos de
+                   stock superado, con la respuesta o con el stock mostrado), useMovimiento.ts (TanStack Form
+                   sobre el paquete local + registro en la cola, 101), foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
                    foto.envio.ts (envío con reintento y qué hacer tras cada fallo), useFotoAvance.ts (estado de la pantalla)
   componentes/     BarraSuperior.tsx, EncabezadoApp.tsx (barra con sesión: «Cerrar sesión» con aviso de pendientes, 101), PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
                    ObrasAsignadas.tsx (lista de GET /obras), ConObra.tsx (carga GET /obras/{id} para una
-                   pantalla de obra), FormularioMovimiento.tsx (ingreso y salida), StockObra.tsx,
+                   pantalla de obra), ConObraLocal.tsx (la obra del paquete guardado, 101), FormularioMovimiento.tsx
+                   (ingreso y salida), StockObra.tsx,
                    SelectorMaterial.tsx (con búsqueda), SelectorPartida.tsx
   sync/            (capa 1, 101) dispositivo.ts (idDispositivo: UUID creado una vez y guardado en secure-store),
                    base-local.ts (expo-sqlite: tablas operacion_pendiente y paquete_datos, migraciones por
@@ -66,7 +67,9 @@ src/
                    ENVIADO de hace más de 24 h), enviador.ts (envío por lotes con candado, espera creciente),
                    red.ts (NetInfo: conexión = isConnected y internet no inalcanzable), disparadores.ts (al
                    volver la señal, al volver a primer plano, cada 60 s con pendientes), sincronizacion.tsx
-                   (SincronizacionProvider y useSincronizacion: contador, red, «Enviar ahora», registrar)
+                   (SincronizacionProvider y useSincronizacion: contador, red, «Enviar ahora», «Actualizar datos»,
+                   registrar; usePaquete y useOperaciones), stock-local.ts (stock del paquete + movimientos sin
+                   enviar, estado con la regla de reglas-negocio.md), mensajes.ts (textos de la 101)
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
                    estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
@@ -100,11 +103,11 @@ src/
 ## Movimientos de material (004)
 
 - Se llega a `obras/[id]/ingreso`, `obras/[id]/salida` y `obras/[id]/stock` (solo `almacenero`, `Stack.Protected` con `PANTALLAS_OBRA`) de dos formas (criterio 1): desde «Mis obras», con los botones «Ingreso», «Salida» y «Stock» de cada obra (`pantallasObraPorRol`: con los dos roles salen también «Foto de avance»; los botones bajan de renglón a 360 px), o desde la pestaña del mismo nombre, que pide elegir la obra.
-- Cada pantalla carga la obra con `ConObra` (`GET /obras/{id}`: nombre y partidas) y lleva `key={id}`.
-- Ingreso y Salida comparten `FormularioMovimiento` (TanStack Form con el esquema Zod de `movimiento.esquema.ts` en `onChange` y `onSubmit`; los errores se muestran junto al campo cuando se tocó o tras pulsar el botón). Material: los activos del catálogo (`GET /materiales?soloActivos=true`, todas las páginas de 100) con búsqueda por código o nombre si son más de 8, y bajo la lista su stock en la obra (`GET /obras/{obraId}/stock`; sin fila, 0). Cantidad: texto con coma o punto, > 0 y hasta 3 decimales (`leerCantidad`). Ingreso: nota de remisión opcional (`notaRemision` solo si se escribió). Salida: partida de destino obligatoria (`SelectorPartida`).
-- `id` del registro (criterio 6): UUID de `expo-crypto` creado al abrir el formulario. «Registrar» envía `POST /movimientos` y, ante error de red, tiempo agotado o `503`, lo repite solo hasta 3 veces (1 s, 2 s, 4 s) con el mismo cuerpo (`conReintentos`). Si al final falla, el registro queda pendiente en memoria: pulsar otra vez con los mismos datos lo repite con el mismo `id` y el mismo `registradoEn`; si los datos cambiaron, es otro registro con otro `id` (`registroParaEnviar`). `201` y `200` (ya existía) son éxito: «Registrado», se vacía el formulario y se crea un `id` nuevo.
+- Ingreso y Salida cargan la obra del paquete guardado en el celular con `ConObraLocal` (101: nombre y partidas; sin paquete, «Necesitas señal la primera vez para descargar tus obras» con «Reintentar»); Stock, con `ConObra` (`GET /obras/{id}`). Llevan `key={id}`.
+- Ingreso y Salida comparten `FormularioMovimiento` (TanStack Form con el esquema Zod de `movimiento.esquema.ts` en `onChange` y `onSubmit`; los errores se muestran junto al campo cuando se tocó o tras pulsar el botón). Material: los del paquete de datos (activos del catálogo, por código) con búsqueda por código o nombre si son más de 8, y bajo la lista su stock en la obra: el del paquete más los movimientos sin enviar (`stockConPendientes`; sin fila, 0). Cantidad: texto con coma o punto, > 0 y hasta 3 decimales (`leerCantidad`). Ingreso: nota de remisión opcional (`notaRemision` solo si se escribió). Salida: partida de destino obligatoria (`SelectorPartida`).
+- `id` del registro (criterio 6): UUID de `expo-crypto` creado al abrir el formulario. Desde la 101, «Registrar» guarda el movimiento en la cola del celular (operación `MOVIMIENTO_MATERIAL` con `idOperacion` = `id` y la descripción «Salida · 12,5 bolsas de Cemento IP-30 · P-01») y dispara el envío a Sincronización; espera hasta 5 s: `ENVIADO` → «Registrado» (con el aviso de `superaStock` de la respuesta); `RECHAZADO` → el motivo según su `codigo` (`mensajeRechazo`) y los datos quedan en el formulario; si no llegó la respuesta → «Guardado en el celular · se enviará cuando haya señal» (y, en una salida mayor al stock mostrado, el mismo aviso del criterio 5 con ese stock, criterio 10). Con «Registrado» o «Guardado» se vacía el formulario; en todos los casos el siguiente registro lleva otro `id`. La cola reemplaza los reintentos 1-2-4 s de la 004 (`conReintentos` y `registroParaEnviar` ya no existen).
 - Stock (criterio 9): `GET /obras/{obraId}/stock` en tarjetas (código · nombre, cantidad y mínimo con su unidad en singular o plural, y el estado), en el orden del servicio (por código), con «tirar para actualizar». El estado va en `EstadoChip` con las etiquetas y tonos del ERP (`estado-stock.ts`: `BAJO` «Bajo» error, `JUSTO` «Justo» atención, `OK` «OK» éxito; fondo suave y texto del color fuerte) y arriba la regla de los estados, el mismo texto que el ERP. Sin filas: «Esta obra todavía no tiene materiales con movimientos ni mínimo definido.» (texto del ERP, 003). El mismo chip acompaña al stock del material en Ingreso y Salida.
-- Tras registrar (criterio 4), la fila del material en la caché del stock se reemplaza con el `stock` de la respuesta y se vuelve a pedir el stock de la obra.
+- Tras registrar (criterio 4), el enviador reemplaza en el paquete local el stock del material con el `stock` de la respuesta y vuelve a pedir el paquete; el formulario se actualiza solo (las consultas del paquete y de la cola se invalidan con cada cambio).
 - Avisos: con `superaStock` (criterio 5), «La salida supera el stock registrado (stock: X). Queda como alerta para revisión», donde X es el stock que había antes de la salida (el `stock.cantidad` de la respuesta más la cantidad que salió) con su unidad. `409 PERIODO_CERRADO` (criterio 7): «El periodo AAAA-MM ya está cerrado», con el mes de `registradoEn` en La Paz (`periodoLaPaz`, la misma regla que Materiales). Los demás errores, con su texto de `errores.ts` (`MATERIAL_INACTIVO`, `OBRA_NO_ENCONTRADA`, genéricos).
 
 ## Reglas
@@ -116,7 +119,7 @@ src/
 
 ## Pruebas
 
-`jest-expo` + Testing Library: cliente REST (reintentos; en `materiales.test.ts`, el movimiento repetido a 1 s, 2 s y 4 s con el mismo cuerpo e `id` ante red, tiempo agotado o `503`, `200` como éxito y los `4xx`/`500` sin reintento), esquemas Zod, componentes principales. `npm test`, `npx tsc --noEmit` y `npx expo-doctor` antes de cada commit.
+`jest-expo` + Testing Library: cliente REST (reintentos de las consultas), cola, enviador y sincronización (101), esquemas Zod, componentes principales. En `rutas.test.tsx`, Sincronización se simula pasando cada operación de `POST /lotes` al `POST /movimientos` simulado. `npm test`, `npx tsc --noEmit` y `npx expo-doctor` antes de cada commit.
 
 - Las pruebas van junto al archivo que prueban (`formato.test.ts`, `estados.test.tsx`).
 - Las rutas (`src/app/`) se prueban desde fuera de esa carpeta, en `src/rutas.test.tsx`, con `renderRouter('src/app')` de `expo-router/testing-library`: todo archivo dentro de `src/app/` es una pantalla, así que ahí no van pruebas.

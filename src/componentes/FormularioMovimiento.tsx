@@ -1,19 +1,14 @@
-import { useQuery } from '@tanstack/react-query';
 import { ScrollView, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Button, HelperText, Snackbar, Surface, Text, TextInput } from 'react-native-paper';
+import { Button, HelperText, Snackbar, Surface, Text, TextInput } from 'react-native-paper';
 
-import { mensajeDeError } from '../api/errores';
-import { stockQuery, type TipoMovimiento } from '../api/materiales';
-import type { DetalleObra } from '../api/obras';
-import { MENSAJE_REGISTRADO } from '../formularios/movimiento';
+import type { TipoMovimiento } from '../api/materiales';
+import type { ObraPaquete, PaqueteDatos } from '../api/sincronizacion';
 import { primerError, useMovimiento } from '../formularios/useMovimiento';
 import { presentacionEstadoStock } from '../nucleo/estado-stock';
 import { formatearCantidadMaterial } from '../nucleo/formato';
-import { useSesion } from '../sesion/sesion';
 import { radios, TAMANO_TACTIL_MINIMO, useTema } from '../tema';
 import { TituloObra } from './ConObra';
 import { EstadoChip } from './EstadoChip';
-import { EstadoError } from './EstadoError';
 import { EstadoVacio } from './EstadoVacio';
 import { SelectorMaterial } from './SelectorMaterial';
 import { SelectorPartida } from './SelectorPartida';
@@ -26,38 +21,19 @@ const TEXTO_BOTON: Record<TipoMovimiento, string> = {
   SALIDA: 'Registrar salida',
 };
 
-type Props = { tipo: TipoMovimiento; obra: DetalleObra };
+type Props = { tipo: TipoMovimiento; obra: ObraPaquete; datos: PaqueteDatos };
 
 /**
  * Ingreso (criterio 2: material, cantidad y nota de remisión opcional) o salida (criterio 3:
- * material, cantidad y partida de destino) de material en una obra.
+ * material, cantidad y partida de destino) de material en una obra, con los datos guardados en el
+ * celular (101): funciona sin señal.
  */
-export function FormularioMovimiento({ tipo, obra }: Props) {
+export function FormularioMovimiento({ tipo, obra, datos }: Props) {
   const { colors } = useTema();
-  const { obtenerToken } = useSesion();
-  const stock = useQuery(stockQuery(obra.id, obtenerToken));
-  const movimiento = useMovimiento(tipo, obra.id);
-  const { formulario, materiales, enviando } = movimiento;
+  const movimiento = useMovimiento(tipo, obra, datos);
+  const { formulario, materiales, stock, enviando } = movimiento;
 
-  if (materiales.isPending) {
-    return (
-      <View style={estilos.centro}>
-        <ActivityIndicator accessibilityLabel="Cargando materiales" />
-      </View>
-    );
-  }
-  if (materiales.isError) {
-    return (
-      <View style={estilos.centro}>
-        <EstadoError
-          mensaje={mensajeDeError(materiales.error)}
-          onReintentar={() => void materiales.refetch()}
-        />
-      </View>
-    );
-  }
-
-  const unidadesDe = (materialId: string) => materiales.data.find((material) => material.id === materialId);
+  const unidadesDe = (materialId: string) => materiales.find((material) => material.id === materialId);
 
   return (
     <View style={estilos.pantalla}>
@@ -70,26 +46,26 @@ export function FormularioMovimiento({ tipo, obra }: Props) {
               <formulario.Field name="materialId">
                 {(campo) => {
                   const error = campo.state.meta.isTouched || intentoEnviar ? primerError(campo.state.meta.errors) : null;
-                  const fila = stock.data?.find((item) => item.materialId === campo.state.value);
+                  const fila = stock.find((item) => item.materialId === campo.state.value);
                   const material = unidadesDe(campo.state.value);
                   return (
                     <View style={estilos.campo}>
                       <Text variant="titleMedium" style={{ color: colors.onSurface }}>
                         Material
                       </Text>
-                      {materiales.data.length === 0 ? (
+                      {materiales.length === 0 ? (
                         <EstadoVacio icono="package-variant" mensaje={MENSAJE_SIN_MATERIALES} />
                       ) : (
                         <Surface mode="flat" style={[estilos.tarjeta, { backgroundColor: colors.surface }]}>
                           <SelectorMaterial
-                            materiales={materiales.data}
+                            materiales={materiales}
                             valor={campo.state.value}
                             onCambiar={campo.handleChange}
                             deshabilitado={enviando}
                           />
                         </Surface>
                       )}
-                      {material && stock.isSuccess ? (
+                      {material ? (
                         <View style={estilos.stock}>
                           <Text variant="bodyMedium" style={{ color: colors.textoSecundario }} testID="stock-material">
                             Stock: {formatearCantidadMaterial(fila?.cantidad ?? 0, material.unidad, material.unidadPlural)}
@@ -228,8 +204,8 @@ export function FormularioMovimiento({ tipo, obra }: Props) {
           {TEXTO_BOTON[tipo]}
         </Button>
       </ScrollView>
-      <Snackbar visible={movimiento.registrado} onDismiss={movimiento.cerrarAvisoRegistrado} duration={4000}>
-        {MENSAJE_REGISTRADO}
+      <Snackbar visible={movimiento.resultado !== null} onDismiss={movimiento.cerrarResultado} duration={4000}>
+        {movimiento.resultado ?? ''}
       </Snackbar>
     </View>
   );
@@ -237,7 +213,6 @@ export function FormularioMovimiento({ tipo, obra }: Props) {
 
 const estilos = StyleSheet.create({
   pantalla: { flex: 1 },
-  centro: { flex: 1, justifyContent: 'center', padding: 16 },
   contenido: { padding: 16, gap: 12 },
   campo: { gap: 8 },
   stock: { flexDirection: 'row', alignItems: 'center', gap: 8 },

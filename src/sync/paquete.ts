@@ -20,6 +20,23 @@ export type PaqueteLocal = {
 
 type FilaPaquete = { version_datos: string; contenido: string; descargado_en: string };
 
+type Oyente = () => void;
+const oyentes = new Set<Oyente>();
+
+/** Avisa cada cambio del paquete guardado (descarga, «sin cambios», stock actualizado o borrado). */
+export function alCambiarPaquete(oyente: Oyente): () => void {
+  oyentes.add(oyente);
+  return () => {
+    oyentes.delete(oyente);
+  };
+}
+
+function avisar(): void {
+  for (const oyente of [...oyentes]) {
+    oyente();
+  }
+}
+
 /** El paquete guardado del usuario, o `null` si nunca se descargó (criterio 4). */
 export async function leerPaquete(usuarioId: string): Promise<PaqueteLocal | null> {
   const db = await baseLocal();
@@ -60,6 +77,7 @@ export async function guardarPaquete(
     JSON.stringify(contenido),
     descargadoEn,
   );
+  avisar();
   return { versionDatos: contenido.versionDatos, contenido, descargadoEn };
 }
 
@@ -96,6 +114,7 @@ export async function descargarPaquete({
       descargadoEn,
       usuarioId,
     );
+    avisar();
     return { paquete: { ...anterior, descargadoEn }, cambio: false };
   }
   if (nuevo === null) {
@@ -139,4 +158,5 @@ export async function actualizarStockLocal(
 export async function borrarPaquete(usuarioId: string): Promise<void> {
   const db = await baseLocal();
   await db.runAsync('DELETE FROM paquete_datos WHERE usuario_id = ?', usuarioId);
+  avisar();
 }

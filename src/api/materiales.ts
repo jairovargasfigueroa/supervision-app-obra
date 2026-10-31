@@ -3,7 +3,7 @@
 import { queryOptions } from '@tanstack/react-query';
 import { z } from 'zod';
 
-import { conReintentos, pedir, urlServicio, validar, type ObtenerToken } from './cliente';
+import { pedir, urlServicio, validar, type ObtenerToken } from './cliente';
 
 const esquemaMaterial = z.looseObject({
   id: z.string(),
@@ -47,7 +47,10 @@ export type MovimientoRegistrado = z.infer<typeof esquemaMovimientoRegistrado>;
 
 export type TipoMovimiento = 'INGRESO' | 'SALIDA';
 
-/** Cuerpo de `POST /movimientos`: `partidaId` solo en `SALIDA`, `notaRemision` solo en `INGRESO`. */
+/**
+ * Cuerpo de `POST /movimientos` (desde la 101 va como `datos` de una operación `MOVIMIENTO_MATERIAL` de
+ * la cola): `partidaId` solo en `SALIDA`, `notaRemision` solo en `INGRESO`.
+ */
 export type RegistroMovimiento = {
   /** UUID generado en el celular: hace idempotente el envío. */
   id: string;
@@ -95,25 +98,6 @@ export async function obtenerStock(obraId: string, obtenerToken: ObtenerToken): 
   return validar(z.array(esquemaFilaStock), datos);
 }
 
-type OpcionesRegistro = Parameters<typeof conReintentos>[1];
-
-/**
- * `POST /movimientos`. Ante error de red, tiempo agotado o `503` lo repite hasta 3 veces (1 s,
- * 2 s, 4 s) con el mismo cuerpo y el mismo `id`. `201` si es nuevo; `200` si ese `id` ya estaba
- * registrado (envío repetido, criterio 6): los dos cuentan como registrado.
- */
-export async function registrarMovimiento(
-  registro: RegistroMovimiento,
-  obtenerToken: ObtenerToken,
-  opciones?: OpcionesRegistro,
-): Promise<{ movimiento: MovimientoRegistrado; yaExistia: boolean }> {
-  const { estado, datos } = await conReintentos(
-    () => pedir(url('/movimientos'), { obtenerToken, metodo: 'POST', cuerpo: registro }),
-    opciones,
-  );
-  return { movimiento: validar(esquemaMovimientoRegistrado, datos), yaExistia: estado === 200 };
-}
-
 export const materialesActivosQuery = (obtenerToken: ObtenerToken) =>
   queryOptions({
     queryKey: ['materiales', 'activos'],
@@ -124,3 +108,9 @@ export const claveStock = (obraId: string) => ['stock', obraId] as const;
 
 export const stockQuery = (obraId: string, obtenerToken: ObtenerToken) =>
   queryOptions({ queryKey: claveStock(obraId), queryFn: () => obtenerStock(obraId, obtenerToken) });
+
+/** La respuesta de `POST /movimientos` guardada en la cola (101), o `null` si no tiene esa forma. */
+export function leerMovimientoRegistrado(respuesta: unknown): MovimientoRegistrado | null {
+  const resultado = esquemaMovimientoRegistrado.safeParse(respuesta);
+  return resultado.success ? resultado.data : null;
+}

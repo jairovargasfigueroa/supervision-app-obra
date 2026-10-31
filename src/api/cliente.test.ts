@@ -1,10 +1,8 @@
 import {
-  conReintentos,
   esperaReintento,
   fetchConTiempo,
   pedir,
   reintentarConsulta,
-  reintentarEnvio,
   urlServicio,
 } from './cliente';
 import { ErrorApi, esReintentable, mensajeDeFallo, type FalloApi } from './errores';
@@ -118,42 +116,6 @@ describe('reintentos de las consultas', () => {
     expect(esReintentable({ tipo: 'http', estado: 429, codigo: 'DEMASIADAS_PETICIONES' })).toBe(true);
     expect(esReintentable({ tipo: 'http', estado: 403, codigo: 'SIN_PERMISO' })).toBe(false);
     expect(esReintentable({ tipo: 'sin-sesion' })).toBe(false);
-  });
-});
-
-describe('reintentos de un registro (diseño 004)', () => {
-  const error = (fallo: FalloApi) => new ErrorApi(fallo);
-  const servicioCaido = error({ tipo: 'http', estado: 503, codigo: 'SERVICIO_NO_DISPONIBLE' });
-
-  it('solo ante error de red, tiempo agotado o 503, y hasta 3 veces', () => {
-    expect(reintentarEnvio(0, error({ tipo: 'red' }))).toBe(true);
-    expect(reintentarEnvio(1, error({ tipo: 'tiempo' }))).toBe(true);
-    expect(reintentarEnvio(2, servicioCaido)).toBe(true);
-    expect(reintentarEnvio(3, error({ tipo: 'red' }))).toBe(false);
-    expect(reintentarEnvio(0, error({ tipo: 'http', estado: 500, codigo: 'ERROR_INTERNO' }))).toBe(false);
-    expect(reintentarEnvio(0, error({ tipo: 'http', estado: 409, codigo: 'PERIODO_CERRADO' }))).toBe(false);
-    expect(reintentarEnvio(0, error({ tipo: 'sin-sesion' }))).toBe(false);
-  });
-
-  it('conReintentos espera 1 s, 2 s y 4 s y se rinde tras el cuarto intento', async () => {
-    const esperas: number[] = [];
-    const operacion = jest.fn().mockRejectedValue(error({ tipo: 'red' }));
-    await expect(
-      conReintentos(operacion, { esperar: async (ms) => void esperas.push(ms) }),
-    ).rejects.toBeInstanceOf(ErrorApi);
-    expect(operacion).toHaveBeenCalledTimes(4);
-    expect(esperas).toEqual([1000, 2000, 4000]);
-  });
-
-  it('conReintentos devuelve el primer éxito y no reintenta un 4xx', async () => {
-    const esperar = jest.fn(() => Promise.resolve());
-    const recupera = jest.fn().mockRejectedValueOnce(servicioCaido).mockResolvedValue('ok');
-    await expect(conReintentos(recupera, { esperar })).resolves.toBe('ok');
-    expect(recupera).toHaveBeenCalledTimes(2);
-
-    const rechazo = jest.fn().mockRejectedValue(error({ tipo: 'http', estado: 422, codigo: 'MATERIAL_INACTIVO' }));
-    await expect(conReintentos(rechazo, { esperar })).rejects.toBeInstanceOf(ErrorApi);
-    expect(rechazo).toHaveBeenCalledTimes(1);
   });
 });
 
