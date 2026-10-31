@@ -1,4 +1,5 @@
 import {
+  adelantarPendientes,
   agregar,
   contarPendientes,
   descartar,
@@ -119,6 +120,20 @@ describe('cola de envíos', () => {
     });
     expect(await tomarParaEnvio('u1', mas(1999))).toEqual([]);
     expect(ids(await tomarParaEnvio('u1', mas(2000)))).toEqual(['a']);
+  });
+
+  it('«Enviar ahora» deja listos los PENDIENTE del usuario', async () => {
+    await agregar(nueva('a'), T0);
+    await agregar(nueva('x', 'u2'), T0);
+    await tomarParaEnvio('u1', T0);
+    await tomarParaEnvio('u2', T0);
+    await marcarParaReintento('a', 3, mas(HORA));
+    await marcarParaReintento('x', 3, mas(HORA));
+
+    await adelantarPendientes('u1');
+
+    expect(await obtener('a')).toMatchObject({ proximoIntentoEn: null, intentos: 3 });
+    expect((await obtener('x'))?.proximoIntentoEn).toBe(mas(HORA).toISOString());
   });
 
   it('guarda la respuesta del enviado y el motivo del rechazado', async () => {

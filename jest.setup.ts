@@ -17,6 +17,11 @@ jest.mock('expo-secure-store', () => jest.requireActual('./src/pruebas/secure-st
 // Base local simulada: SQLite real en memoria de Node (src/pruebas/sqlite-simulado.ts, se vacía antes de cada prueba).
 jest.mock('expo-sqlite', () => jest.requireActual('./src/pruebas/sqlite-simulado'));
 
+// Red del celular: el simulado oficial de NetInfo (con conexión; las pruebas cambian lo que avisa).
+jest.mock('@react-native-community/netinfo', () =>
+  jest.requireActual('@react-native-community/netinfo/jest/netinfo-mock.js'),
+);
+
 // En Jest expo-constants no trae el app.json: la configuración se lee de app.json directamente.
 jest.mock('./src/nucleo/configuracion', () => {
   const real = jest.requireActual<typeof import('./src/nucleo/configuracion')>(

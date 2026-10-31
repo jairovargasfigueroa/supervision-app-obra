@@ -26,7 +26,8 @@ src/
     index.tsx                        # entrada: redirige según la sesión
     (auth)/iniciar-sesion.tsx
     (auth)/sin-acceso.tsx            # sin maestro ni almacenero (criterio 3)
-    (app)/_layout.tsx                # Stack con la barra superior (nombre, rol, «Volver»); pantallas de obra con Stack.Protected por rol
+    (app)/_layout.tsx                # Stack con la barra superior (nombre, rol, «Volver»); pantallas de obra con Stack.Protected por rol;
+                                     # SincronizacionProvider del usuario de la sesión (101)
     (app)/(pestanas)/_layout.tsx     # pestañas según rol (Tabs.Protected)
     (app)/(pestanas)/obras/index.tsx # pestaña Mis obras (maestro y almacenero)
     (app)/(pestanas)/foto.tsx        # pestaña Foto de avance (maestro): elige la obra
@@ -61,7 +62,10 @@ src/
                    (operaciones con su UUID: agregar sin duplicar, listar y contar por usuario, descartar
                    PENDIENTE o RECHAZADO, tomar hasta 20 listas en orden y marcarlas ENVIANDO, marcar
                    ENVIADO / RECHAZADO / reintento; al abrir la app ENVIANDO → PENDIENTE y se borran los
-                   ENVIADO de hace más de 24 h), enviador.ts (envío por lotes con candado, espera creciente)
+                   ENVIADO de hace más de 24 h), enviador.ts (envío por lotes con candado, espera creciente),
+                   red.ts (NetInfo: conexión = isConnected y internet no inalcanzable), disparadores.ts (al
+                   volver la señal, al volver a primer plano, cada 60 s con pendientes), sincronizacion.tsx
+                   (SincronizacionProvider y useSincronizacion: contador, red, «Enviar ahora», registrar)
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
                    estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
@@ -117,6 +121,7 @@ src/
 - Las rutas (`src/app/`) se prueban desde fuera de esa carpeta, en `src/rutas.test.tsx`, con `renderRouter('src/app')` de `expo-router/testing-library`: todo archivo dentro de `src/app/` es una pantalla, así que ahí no van pruebas.
 - `testTimeout` de Jest en 60 s (`package.json`): la primera prueba que monta Expo Router tarda en cargar los módulos.
 - `jest.setup.ts` (en `setupFilesAfterEnv`) simula `expo-secure-store` en memoria (`src/pruebas/secure-store-simulado.ts`, se vacía antes de cada prueba) y `expo-font` (fuentes e íconos dados por cargados), porque en Jest no hay archivos de fuentes reales. También simula `expo-image-picker` y `expo-image-manipulator` (`src/pruebas/imagen-simulada.ts`), `randomUUID` de `expo-crypto` (con el `crypto` de Node), `configuracion()` (lee `app.json`, porque en Jest `expo-constants` no lo trae) y `src/api/red.ts`.
+- `@react-native-community/netinfo` se simula con su simulado oficial (`jest/netinfo-mock.js`: con conexión); las pruebas de los disparadores capturan el oyente para avisar cambios.
 - `expo-sqlite` se simula con `src/pruebas/sqlite-simulado.ts`: cada base es un SQLite real en memoria de Node (`node:sqlite`), así las pruebas ejecutan el mismo SQL que el celular; las bases se guardan por nombre (volver a abrir conserva los datos) y se vacían antes de cada prueba, junto con la conexión de `base-local.ts` y el `idDispositivo` en memoria.
 - La red se simula en `src/api/red.ts` (`jest.mock`) y no en el `fetch` global, porque Expo vuelve a instalar su `fetch` (`expo/fetch`) al cargar sus módulos dentro de `renderRouter` y pisaría el simulado. Cada prueba le da sus respuestas con `simularFetch()` y `jsonRespuesta()` (`src/pruebas/fetch-simulado.ts`).
 - Compilación sin celular: `npx expo export --platform android`.
@@ -125,4 +130,5 @@ src/
 
 - `sync/enviador.ts` (`enviarPendientes`): un solo envío a la vez (candado en memoria; si llega otro pedido durante el envío, se hace otra vuelta al terminar). Por cada vuelta: token vigente (si no se puede renovar por falta de red se detiene sin tocar la cola, `sin-red`; si la sesión terminó, `sin-sesion`) → hasta 20 operaciones `PENDIENTE` listas del usuario, en orden, marcadas `ENVIANDO` → `POST /lotes` (30 s) → por resultado: `PROCESADO` → `ENVIADO` con la respuesta (en un movimiento, el `stock` de la respuesta reemplaza el del paquete local); `ERROR` → `RECHAZADO` con `codigo` (el `detail` o `title` va a `error_mensaje`, solo para soporte); `REINTENTAR` → `PENDIENTE` con un intento más y espera creciente (con `TOKEN_VENCIDO`, el token se renueva antes del siguiente lote con `obtenerToken({ renovar: true })`). Se repite mientras queden listas; si envió alguna, vuelve a pedir el paquete con `If-None-Match`.
 - Espera creciente: `min(2^(intentos−1), 300)` s por un factor aleatorio entre 0,8 y 1,2.
+- `sync/sincronizacion.tsx` (`SincronizacionProvider`, montado en `(app)/_layout.tsx` con `key` del usuario): la primera vez prepara la cola (`ENVIANDO` → `PENDIENTE`, borra los `ENVIADO` de más de 24 h) y envía (al abrir la app o iniciar sesión); `registrar` agrega a la cola con el `id` y el `nombre` del usuario y dispara el envío sin esperarlo; el contador (`PENDIENTE` + `ENVIANDO`) se recalcula con cada cambio de la cola (`alCambiarCola`). Los disparadores (`disparadores.ts`): NetInfo de sin señal a con señal (el primer aviso, el estado al abrir, no cuenta), `AppState` → `active`, y cada 60 s si hay pendientes y no se sabe que falte la señal; respetan la espera creciente. «Enviar ahora» (`enviarAhora`) deja listos ya todos los `PENDIENTE` del usuario (sin esperar su próximo intento; decisión de implementación: es un pedido explícito del usuario) y envía.
 - Fallo del lote completo (red, tiempo agotado, `5xx`, `429`…): todas vuelven a `PENDIENTE` con espera creciente y el envío se detiene. Decisiones de implementación (el diseño no las detalla): un `401` del lote renueva el token y lo reenvía una sola vez de inmediato (otro `401` va con espera creciente); `400 LOTE_INVALIDO` y `413` dejan las operaciones del lote `RECHAZADO` con ese código, porque reenviar el mismo lote daría lo mismo.

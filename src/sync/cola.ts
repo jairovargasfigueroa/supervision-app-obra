@@ -91,6 +91,23 @@ function desdeFila(f: Fila): Operacion {
   };
 }
 
+type Oyente = () => void;
+const oyentes = new Set<Oyente>();
+
+/** Avisa cada cambio de la cola (para el contador y la pantalla «Pendientes de envío»). */
+export function alCambiarCola(oyente: Oyente): () => void {
+  oyentes.add(oyente);
+  return () => {
+    oyentes.delete(oyente);
+  };
+}
+
+function avisar(): void {
+  for (const oyente of [...oyentes]) {
+    oyente();
+  }
+}
+
 // `rowid` desempata dos registros del mismo milisegundo: sale primero el que se guardó primero.
 const ORDEN = 'ORDER BY creada_en, rowid';
 
@@ -124,6 +141,7 @@ export async function agregar(nueva: NuevaOperacion, ahora: Date = new Date()): 
     nueva.descripcion,
     ahora.toISOString(),
   );
+  avisar();
   const guardada = await obtener(nueva.idOperacion);
   if (!guardada) {
     throw new Error('No se pudo guardar la operación en el celular.');
@@ -161,6 +179,9 @@ export async function descartar(idOperacion: string): Promise<boolean> {
     "DELETE FROM operacion_pendiente WHERE id_operacion = ? AND estado IN ('PENDIENTE', 'RECHAZADO')",
     idOperacion,
   );
+  if (changes > 0) {
+    avisar();
+  }
   return changes > 0;
 }
 
@@ -176,6 +197,16 @@ export async function prepararCola(ahora: Date = new Date()): Promise<void> {
   await db.runAsync(
     "DELETE FROM operacion_pendiente WHERE estado = 'ENVIADO' AND enviada_en < ?",
     limite,
+  );
+  avisar();
+}
+
+/** «Enviar ahora»: los `PENDIENTE` del usuario quedan listos ya, sin esperar su próximo intento. */
+export async function adelantarPendientes(usuarioId: string): Promise<void> {
+  const db = await baseLocal();
+  await db.runAsync(
+    "UPDATE operacion_pendiente SET proximo_intento_en = NULL WHERE usuario_id = ? AND estado = 'PENDIENTE'",
+    usuarioId,
   );
 }
 
@@ -208,6 +239,9 @@ export async function tomarParaEnvio(
     }
     tomadas = filas.map((f) => ({ ...desdeFila(f), estado: 'ENVIANDO' as const }));
   });
+  if (tomadas.length > 0) {
+    avisar();
+  }
   return tomadas;
 }
 
@@ -227,6 +261,7 @@ export async function marcarEnviada(
     ahora.toISOString(),
     idOperacion,
   );
+  avisar();
 }
 
 /** `ERROR` en el servidor: rechazo definitivo con su código (criterio 14); no se reintenta. */
@@ -246,6 +281,7 @@ export async function marcarRechazada(
     JSON.stringify(respuesta ?? null),
     idOperacion,
   );
+  avisar();
 }
 
 /** No se pudo completar: vuelve a `PENDIENTE` con un intento más y la hora del próximo. */
@@ -265,4 +301,5 @@ export async function marcarParaReintento(
     codigo,
     idOperacion,
   );
+  avisar();
 }
