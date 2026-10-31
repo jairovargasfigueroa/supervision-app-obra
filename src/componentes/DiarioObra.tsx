@@ -1,14 +1,15 @@
-import { useMemo } from 'react';
 import { FlatList, StyleSheet, View } from 'react-native';
-import { Card, Icon, Text } from 'react-native-paper';
+import { Button, Card, Chip, HelperText, Icon, Snackbar, Surface, Text, TextInput } from 'react-native-paper';
 
 import type { ObraPaquete } from '../api/sincronizacion';
-import { ETIQUETA_CLIMA, ICONO_CLIMA } from '../nucleo/clima';
-import { formatearFecha } from '../nucleo/formato';
-import { entradasDeObra, type EntradaDiario } from '../sync/diario-local';
+import { largoTexto, TEXTO_MAXIMO } from '../formularios/diario.esquema';
+import { useDiario } from '../formularios/useDiario';
+import { primerError } from '../formularios/useMovimiento';
+import { CLIMAS, ETIQUETA_CLIMA, ICONO_CLIMA } from '../nucleo/clima';
+import { formatearDiaMes, formatearFecha } from '../nucleo/formato';
+import type { EntradaDiario } from '../sync/diario-local';
 import { ETIQUETA_ENTRADA, mensajeRechazo } from '../sync/mensajes';
-import { useOperaciones } from '../sync/sincronizacion';
-import { radios, useTema } from '../tema';
+import { radios, TAMANO_TACTIL_MINIMO, useTema } from '../tema';
 import { EstadoChip } from './EstadoChip';
 import { EstadoVacio } from './EstadoVacio';
 import { TituloObra } from './TituloObra';
@@ -17,23 +18,166 @@ export const MENSAJE_DIARIO_VACIO = 'Aún no hay entradas del diario en los últ
 
 type Props = { obra: ObraPaquete };
 
+/** «Hoy», «Ayer» o «dd/mm». */
+function etiquetaFecha(fecha: string, indice: number): string {
+  return indice === 0 ? 'Hoy' : indice === 1 ? 'Ayer' : formatearDiaMes(fecha);
+}
+
 /**
- * Diario de obra (103, maestro): las entradas de los últimos 30 días, las del servidor (del paquete) y
- * las del celular que todavía no se enviaron («Sin enviar») o que se rechazaron («Rechazada»).
+ * Diario de obra (103, maestro): arriba la entrada del día (fecha, clima y texto) y debajo las entradas
+ * de los últimos 30 días, las del servidor (del paquete) y las del celular que todavía no se enviaron
+ * («Sin enviar») o que se rechazaron («Rechazada»).
  */
 export function DiarioObra({ obra }: Props) {
-  const operaciones = useOperaciones();
-  const entradas = useMemo(() => entradasDeObra(obra, operaciones.data ?? []), [obra, operaciones.data]);
+  const { colors } = useTema();
+  const diario = useDiario(obra);
+  const { formulario, enviando } = diario;
+
+  const encabezado = (
+    <View style={estilos.encabezado}>
+      <TituloObra obra={obra} />
+      <formulario.Subscribe selector={(estado) => estado.submissionAttempts > 0}>
+        {(intento) => (
+          <>
+            <formulario.Field name="fecha">
+              {(campo) => (
+                <View style={estilos.campo}>
+                  <Text variant="titleMedium" style={{ color: colors.onSurface }}>
+                    Fecha
+                  </Text>
+                  <View style={estilos.opciones}>
+                    {diario.fechas.map((fecha, i) => (
+                      <Chip
+                        key={fecha}
+                        selected={campo.state.value === fecha}
+                        showSelectedCheck={false}
+                        mode={campo.state.value === fecha ? 'flat' : 'outlined'}
+                        onPress={() => campo.handleChange(fecha)}
+                        disabled={enviando}
+                        accessibilityLabel={`Fecha: ${etiquetaFecha(fecha, i)}`}
+                        accessibilityState={{ selected: campo.state.value === fecha }}
+                      >
+                        {etiquetaFecha(fecha, i)}
+                      </Chip>
+                    ))}
+                  </View>
+                </View>
+              )}
+            </formulario.Field>
+            <formulario.Field name="clima">
+              {(campo) => {
+                const error = campo.state.meta.isTouched || intento ? primerError(campo.state.meta.errors) : null;
+                return (
+                  <View style={estilos.campo}>
+                    <Text variant="titleMedium" style={{ color: colors.onSurface }}>
+                      Clima
+                    </Text>
+                    <View style={estilos.opciones}>
+                      {CLIMAS.map((clima) => (
+                        <Chip
+                          key={clima}
+                          icon={ICONO_CLIMA[clima]}
+                          selected={campo.state.value === clima}
+                          showSelectedCheck={false}
+                          mode={campo.state.value === clima ? 'flat' : 'outlined'}
+                          onPress={() => campo.handleChange(clima)}
+                          disabled={enviando}
+                          accessibilityLabel={`Clima: ${ETIQUETA_CLIMA[clima]}`}
+                          accessibilityState={{ selected: campo.state.value === clima }}
+                        >
+                          {ETIQUETA_CLIMA[clima]}
+                        </Chip>
+                      ))}
+                    </View>
+                    {error ? (
+                      <HelperText type="error" visible>
+                        {error}
+                      </HelperText>
+                    ) : null}
+                  </View>
+                );
+              }}
+            </formulario.Field>
+            <formulario.Field name="texto">
+              {(campo) => {
+                const error = campo.state.meta.isTouched || intento ? primerError(campo.state.meta.errors) : null;
+                return (
+                  <View>
+                    <TextInput
+                      mode="outlined"
+                      label="Qué pasó hoy en la obra"
+                      accessibilityLabel="Texto del diario"
+                      multiline
+                      numberOfLines={4}
+                      value={campo.state.value}
+                      onChangeText={campo.handleChange}
+                      onBlur={campo.handleBlur}
+                      error={error !== null}
+                      disabled={enviando}
+                      outlineStyle={{ borderRadius: radios.control }}
+                    />
+                    <View style={estilos.pie}>
+                      <View style={estilos.errorTexto}>
+                        {error ? (
+                          <HelperText type="error" visible>
+                            {error}
+                          </HelperText>
+                        ) : null}
+                      </View>
+                      <Text variant="bodySmall" style={{ color: colors.textoSecundario }} testID="contador-texto">
+                        {`${largoTexto(campo.state.value)}/${TEXTO_MAXIMO}`}
+                      </Text>
+                    </View>
+                  </View>
+                );
+              }}
+            </formulario.Field>
+          </>
+        )}
+      </formulario.Subscribe>
+      {diario.fallo ? (
+        <Surface
+          mode="flat"
+          style={[estilos.aviso, { backgroundColor: colors.errorSuave }]}
+          accessibilityRole="alert"
+          testID="diario-fallido"
+        >
+          <Text variant="bodyMedium" style={{ color: colors.error }}>
+            {diario.fallo}
+          </Text>
+        </Surface>
+      ) : null}
+      <Button
+        mode="contained"
+        icon="content-save-outline"
+        onPress={() => void formulario.handleSubmit()}
+        loading={enviando}
+        disabled={enviando}
+        contentStyle={estilos.boton}
+      >
+        Guardar entrada
+      </Button>
+      <Text variant="titleMedium" style={[estilos.subtitulo, { color: colors.onSurface }]}>
+        Últimos 30 días
+      </Text>
+    </View>
+  );
 
   return (
-    <FlatList
-      data={entradas}
-      keyExtractor={(e) => e.id}
-      contentContainerStyle={estilos.lista}
-      ListHeaderComponent={<TituloObra obra={obra} />}
-      ListEmptyComponent={<EstadoVacio icono="notebook-outline" mensaje={MENSAJE_DIARIO_VACIO} />}
-      renderItem={({ item }) => <TarjetaEntrada entrada={item} />}
-    />
+    <View style={estilos.pantalla}>
+      <FlatList
+        data={diario.entradas}
+        keyExtractor={(e) => e.id}
+        contentContainerStyle={estilos.lista}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={encabezado}
+        ListEmptyComponent={<EstadoVacio icono="notebook-outline" mensaje={MENSAJE_DIARIO_VACIO} />}
+        renderItem={({ item }) => <TarjetaEntrada entrada={item} />}
+      />
+      <Snackbar visible={diario.resultado !== null} onDismiss={diario.cerrarResultado} duration={4000}>
+        {diario.resultado ?? ''}
+      </Snackbar>
+    </View>
   );
 }
 
@@ -66,7 +210,16 @@ function TarjetaEntrada({ entrada }: { entrada: EntradaDiario }) {
 }
 
 const estilos = StyleSheet.create({
+  pantalla: { flex: 1 },
   lista: { padding: 16, gap: 12 },
+  encabezado: { gap: 12 },
+  campo: { gap: 8 },
+  opciones: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pie: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  errorTexto: { flex: 1 },
+  aviso: { borderRadius: radios.tarjeta, padding: 12 },
+  boton: { minHeight: TAMANO_TACTIL_MINIMO },
+  subtitulo: { marginTop: 8 },
   tarjeta: { borderRadius: radios.tarjeta },
   contenido: { gap: 6 },
   fila: { flexDirection: 'row', alignItems: 'center', gap: 8 },

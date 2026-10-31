@@ -908,6 +908,62 @@ describe('diario de obra (103)', () => {
     expect(screen.queryByText('Vieja: fuera de los 30 días.')).toBeNull();
   });
 
+  const abrirDiario = async () => {
+    await guardarTokens(sesionDe(['maestro']));
+    await renderRouter('src/app', { initialUrl: '/obras/o1/diario' });
+    await screen.findByText('Guardar entrada');
+  };
+
+  it('guarda la entrada del día en la cola con clima y texto (criterios 1 a 3)', async () => {
+    obras['GET /paquete-datos'] = conDiario([]);
+    await abrirDiario();
+    expect(screen.getByLabelText('Fecha: Hoy').props.accessibilityState).toMatchObject({ selected: true });
+    await fireEvent.press(screen.getByLabelText('Clima: Lluvia leve'));
+    await fireEvent.changeText(screen.getByLabelText('Texto del diario'), '  Se vació la losa del 2do piso.  ');
+    expect(screen.getByTestId('contador-texto')).toHaveTextContent('30/2000');
+    await fireEvent.press(screen.getByRole('button', { name: /Guardar entrada/ }));
+
+    expect(await screen.findByText('Guardado en el celular · se enviará cuando haya señal')).toBeTruthy();
+    const [op] = await listar('id-usuario1');
+    expect(op).toMatchObject({
+      tipo: 'ENTRADA_DIARIO',
+      obraId: 'o1',
+      datos: { id: op.idOperacion, obraId: 'o1', fecha: hoy(), clima: 'LLUVIA_LEVE', texto: 'Se vació la losa del 2do piso.' },
+      descripcion: `Diario · ${hoy().slice(8, 10)}/${hoy().slice(5, 7)} · Lluvia leve`,
+    });
+    // Aparece en la lista como «Sin enviar».
+    expect(await screen.findByText('Sin enviar')).toBeTruthy();
+  });
+
+  it('pide el clima y al menos 10 caracteres', async () => {
+    obras['GET /paquete-datos'] = conDiario([]);
+    await abrirDiario();
+    await fireEvent.changeText(screen.getByLabelText('Texto del diario'), 'Corto');
+    await fireEvent.press(screen.getByRole('button', { name: /Guardar entrada/ }));
+    expect(await screen.findByText('Elige el clima.')).toBeTruthy();
+    expect(screen.getByText('Escribe al menos 10 caracteres.')).toBeTruthy();
+    await expect(listar('id-usuario1')).resolves.toEqual([]);
+  });
+
+  it('una sola entrada por día: si ya está en el servidor no deja crear otra (criterio 4)', async () => {
+    obras['GET /paquete-datos'] = conDiario([{ id: 'd1', fecha: hoy(), clima: 'SOLEADO', texto: 'Ya registrada hoy.' }]);
+    await abrirDiario();
+    await screen.findByText('Ya registrada hoy.');
+    await fireEvent.press(screen.getByLabelText('Clima: Nublado'));
+    await fireEvent.changeText(screen.getByLabelText('Texto del diario'), 'Otra entrada del mismo día.');
+    await fireEvent.press(screen.getByRole('button', { name: /Guardar entrada/ }));
+    expect(
+      await screen.findByText(`Ya registraste el diario del ${hoy().slice(8, 10)}/${hoy().slice(5, 7)}`),
+    ).toBeTruthy();
+    await expect(listar('id-usuario1')).resolves.toEqual([]);
+
+    // Ayer sí se puede (hasta 7 días atrás, criterio 2).
+    await fireEvent.press(screen.getByLabelText('Fecha: Ayer'));
+    await fireEvent.press(screen.getByRole('button', { name: /Guardar entrada/ }));
+    expect(await screen.findByText('Guardado en el celular · se enviará cuando haya señal')).toBeTruthy();
+    await expect(listar('id-usuario1')).resolves.toHaveLength(1);
+  });
+
   it('el almacenero no llega al diario', async () => {
     await guardarTokens(sesionDe(['almacenero']));
     await renderRouter('src/app', { initialUrl: '/obras/o1/diario' });

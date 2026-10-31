@@ -1,6 +1,7 @@
 // Textos de la app sin señal (101; docs/mensajes.md de la carpeta general, «App sin señal»).
 import { mensajeDeFallo, mensajePeriodoCerrado } from '../api/errores';
-import { formatearCantidadMaterial, formatearDiaHora, periodoLaPaz } from '../nucleo/formato';
+import { ETIQUETA_CLIMA, type Clima } from '../nucleo/clima';
+import { formatearCantidadMaterial, formatearDiaHora, formatearDiaMes, periodoLaPaz } from '../nucleo/formato';
 import type { EstadoOperacion, Operacion } from './cola';
 import type { EstadoEntrada } from './diario-local';
 
@@ -27,6 +28,16 @@ export const ETIQUETA_ESTADO: Record<EstadoOperacion, string> = {
   ENVIADO: 'Enviado',
   RECHAZADO: 'Rechazado',
 };
+
+/** Descripción de una entrada del diario en «Pendientes de envío» (103): «Diario · 15/11 · Lluvia leve». */
+export function descripcionDiario(fecha: string, clima: Clima): string {
+  return `Diario · ${formatearDiaMes(fecha)} · ${ETIQUETA_CLIMA[clima]}`;
+}
+
+/** Ya hay una entrada ese día, en el celular o en el servidor (103, criterio 4). */
+export function mensajeDiarioYaRegistrado(fecha: string): string {
+  return `Ya registraste el diario del ${formatearDiaMes(fecha)}`;
+}
 
 /** Marca de una entrada del diario en su pantalla (103, criterio 7); las enviadas no llevan marca. */
 export const ETIQUETA_ENTRADA: Record<EstadoEntrada, string | null> = {
