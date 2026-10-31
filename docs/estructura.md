@@ -40,7 +40,8 @@ src/
     (app)/obras/[id]/stock.tsx       # almacenero
   sesion/          sesion.tsx (contexto: SesionProvider, useSesion), keycloak.ts (expo-auth-session),
                    tokens.ts (secure-store), token.ts (lee el JWT), renovacion.ts (cuándo renovar),
-                   roles.ts (roles efectivos, pestañas y pantallas de obra por rol, nombre del rol)
+                   roles.ts (roles efectivos, pestañas y pantallas de obra por rol, nombre del rol),
+                   usuario-local.ts (101: último usuario { id, nombre, usuario, roles } en secure-store)
   api/             red.ts (única llamada a fetch), cliente.ts (token, tiempo máximo, X-Request-Id, errores por
                    codigo, URL de cada servicio, validación Zod de la respuesta; QueryClient con reintentos
                    1-2-4 s de las consultas y conReintentos para repetir un registro con su id), errores.ts (ErrorApi y textos de docs/mensajes.md),
@@ -51,7 +52,7 @@ src/
                    se envía y con qué id, avisos de stock superado y periodo cerrado), useMovimiento.ts (TanStack
                    Form + envío), foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
                    foto.envio.ts (envío con reintento y qué hacer tras cada fallo), useFotoAvance.ts (estado de la pantalla)
-  componentes/     BarraSuperior.tsx, PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
+  componentes/     BarraSuperior.tsx, EncabezadoApp.tsx (barra con sesión: «Cerrar sesión» con aviso de pendientes, 101), PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
                    ObrasAsignadas.tsx (lista de GET /obras), ConObra.tsx (carga GET /obras/{id} para una
                    pantalla de obra), FormularioMovimiento.tsx (ingreso y salida), StockObra.tsx,
                    SelectorMaterial.tsx (con búsqueda), SelectorPartida.tsx
@@ -130,5 +131,7 @@ src/
 
 - `sync/enviador.ts` (`enviarPendientes`): un solo envío a la vez (candado en memoria; si llega otro pedido durante el envío, se hace otra vuelta al terminar). Por cada vuelta: token vigente (si no se puede renovar por falta de red se detiene sin tocar la cola, `sin-red`; si la sesión terminó, `sin-sesion`) → hasta 20 operaciones `PENDIENTE` listas del usuario, en orden, marcadas `ENVIANDO` → `POST /lotes` (30 s) → por resultado: `PROCESADO` → `ENVIADO` con la respuesta (en un movimiento, el `stock` de la respuesta reemplaza el del paquete local); `ERROR` → `RECHAZADO` con `codigo` (el `detail` o `title` va a `error_mensaje`, solo para soporte); `REINTENTAR` → `PENDIENTE` con un intento más y espera creciente (con `TOKEN_VENCIDO`, el token se renueva antes del siguiente lote con `obtenerToken({ renovar: true })`). Se repite mientras queden listas; si envió alguna, vuelve a pedir el paquete con `If-None-Match`.
 - Espera creciente: `min(2^(intentos−1), 300)` s por un factor aleatorio entre 0,8 y 1,2.
+- Sesión sin señal: al entrar (inicio de sesión, apertura o renovación) se guarda el `usuarioLocal` en `expo-secure-store` (`sesion/usuario-local.ts`). Si al abrir la app la renovación falla por la red, se entra con los tokens guardados y el `usuarioLocal` aunque el token haya vencido; los envíos esperan a que se renueve (el enviador se detiene con `sin-red`). Si Keycloak rechaza la renovación, se borran los tokens y el `usuarioLocal` y vuelve el inicio de sesión; la cola no se toca.
+- Cerrar sesión (`EncabezadoApp`): con pendientes del usuario (`PENDIENTE` + `ENVIANDO`), primero el diálogo «¿Cerrar sesión?» con «Tienes N registros sin enviar; se enviarán cuando vuelvas a iniciar sesión con este usuario», «Cancelar» y «Cerrar sesión». Al cerrar se borra el `paquete_datos` del usuario y después tokens y `usuarioLocal` (como en la 001); las operaciones quedan en la cola con su `usuario_id`. Textos de la 101 en `sync/mensajes.ts`.
 - `sync/sincronizacion.tsx` (`SincronizacionProvider`, montado en `(app)/_layout.tsx` con `key` del usuario): la primera vez prepara la cola (`ENVIANDO` → `PENDIENTE`, borra los `ENVIADO` de más de 24 h) y envía (al abrir la app o iniciar sesión); `registrar` agrega a la cola con el `id` y el `nombre` del usuario y dispara el envío sin esperarlo; el contador (`PENDIENTE` + `ENVIANDO`) se recalcula con cada cambio de la cola (`alCambiarCola`). Los disparadores (`disparadores.ts`): NetInfo de sin señal a con señal (el primer aviso, el estado al abrir, no cuenta), `AppState` → `active`, y cada 60 s si hay pendientes y no se sabe que falte la señal; respetan la espera creciente. «Enviar ahora» (`enviarAhora`) deja listos ya todos los `PENDIENTE` del usuario (sin esperar su próximo intento; decisión de implementación: es un pedido explícito del usuario) y envía.
 - Fallo del lote completo (red, tiempo agotado, `5xx`, `429`…): todas vuelven a `PENDIENTE` con espera creciente y el envío se detiene. Decisiones de implementación (el diseño no las detalla): un `401` del lote renueva el token y lo reenvía una sola vez de inmediato (otro `401` va con espera creciente); `400 LOTE_INVALIDO` y `413` dejan las operaciones del lote `RECHAZADO` con ese código, porque reenviar el mismo lote daría lo mismo.

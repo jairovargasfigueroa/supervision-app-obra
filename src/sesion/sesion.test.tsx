@@ -7,6 +7,7 @@ import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './ke
 import { RenovacionRechazada } from './renovacion';
 import { MENSAJES_SESION, SesionProvider, useSesion } from './sesion';
 import { guardarTokens, leerTokens, type Tokens } from './tokens';
+import { guardarUsuarioLocal, leerUsuarioLocal } from './usuario-local';
 
 jest.mock('./keycloak');
 
@@ -137,6 +138,32 @@ describe('SesionProvider', () => {
     await montar();
     expect(await screen.findByText('activa:Juan Pérez')).toBeTruthy();
     await expect(leerTokens()).resolves.not.toBeNull();
+  });
+
+  it('guarda el usuario en el celular al entrar (101, usuarioLocal)', async () => {
+    await guardarTokens(tokens(ahora() + 300, tokenDeUsuario(['almacenero'], { nombre: 'Ana Quispe' })));
+    await montar();
+    await screen.findByText('activa:Ana Quispe');
+    await waitFor(async () => expect(await leerUsuarioLocal()).toMatchObject({ nombre: 'Ana Quispe', roles: expect.arrayContaining(['almacenero']) }));
+  });
+
+  it('sin señal entra con el último usuario guardado aunque el token haya vencido (101, criterio 6)', async () => {
+    renovarMock.mockRejectedValue(new TypeError('Network request failed'));
+    const vencidos = tokens(ahora() - 3600, tokenDeUsuario(['almacenero'], { nombre: 'Del token' }));
+    await guardarTokens(vencidos);
+    await guardarUsuarioLocal({ id: 'u-local', nombre: 'Ana Quispe', usuario: 'ana', roles: ['almacenero'] });
+    await montar();
+    expect(await screen.findByText('activa:Ana Quispe')).toBeTruthy();
+    await expect(leerTokens()).resolves.toEqual(vencidos);
+  });
+
+  it('si Keycloak rechaza la renovación también se borra el usuario guardado', async () => {
+    renovarMock.mockRejectedValue(new RenovacionRechazada());
+    await guardarTokens(tokens(ahora() - 10));
+    await guardarUsuarioLocal({ id: 'u1', nombre: 'Ana', usuario: 'ana', roles: ['almacenero'] });
+    await montar();
+    expect(await screen.findByText('sin-sesion:vencida')).toBeTruthy();
+    await expect(leerUsuarioLocal()).resolves.toBeNull();
   });
 
   it('renueva solo mientras el usuario trabaja y, si ya no puede, vuelve al inicio de sesión', async () => {

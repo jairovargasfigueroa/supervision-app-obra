@@ -14,6 +14,7 @@ import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './ke
 import { asegurarVigencia, msHastaRenovar } from './renovacion';
 import { usuarioDelToken, type Usuario } from './token';
 import { borrarTokens, guardarTokens, leerTokens, type Tokens } from './tokens';
+import { borrarUsuarioLocal, guardarUsuarioLocal, leerUsuarioLocal } from './usuario-local';
 
 /** Mensajes de docs/mensajes.md. */
 export const MENSAJES_SESION = {
@@ -66,16 +67,21 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   const tokensRef = useRef<Tokens | null>(null);
   const renovacionRef = useRef<Promise<string | null> | null>(null);
 
-  const activar = useCallback((tokens: Tokens) => {
+  // `usuario`: el guardado en el celular (101, sesión sin señal); si no, el del token. El usuario queda
+  // guardado como `usuarioLocal` para la próxima vez que se abra la app sin señal.
+  const activar = useCallback((tokens: Tokens, usuario?: Usuario) => {
     tokensRef.current = tokens;
+    const activo = usuario ?? usuarioDelToken(tokens.accessToken);
     setVenceEn(tokens.venceEn);
-    setSesion({ estado: 'activa', usuario: usuarioDelToken(tokens.accessToken) });
+    setSesion({ estado: 'activa', usuario: activo });
+    guardarUsuarioLocal(activo).catch(() => undefined);
   }, []);
 
   const terminar = useCallback(async (motivo: 'vencida' | 'cerrada') => {
     tokensRef.current = null;
     setVenceEn(null);
     await borrarTokens();
+    await borrarUsuarioLocal();
     setSesion({ estado: 'sin-sesion', motivo });
   }, []);
 
@@ -122,9 +128,11 @@ export function SesionProvider({ children }: { children: ReactNode }) {
           activar(tokensRef.current);
         }
       } catch {
-        // Sin conexión: se sigue con la sesión guardada y se reintenta más tarde.
+        // Sin conexión (101, criterio 6): se entra con el último usuario guardado aunque el token haya
+        // vencido; los envíos esperan a que se renueve, que se reintenta más tarde.
+        const local = await leerUsuarioLocal().catch(() => null);
         if (vigente) {
-          activar(guardados);
+          activar(guardados, local ?? undefined);
           setReintento((n) => n + 1);
         }
       }

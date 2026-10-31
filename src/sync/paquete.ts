@@ -134,3 +134,9 @@ export async function actualizarStockLocal(
   }
   await guardarPaquete(usuarioId, guardado.contenido, guardado.descargadoEn);
 }
+
+/** Al cerrar sesión (criterio 18): se borran los datos descargados del usuario; la cola se conserva. */
+export async function borrarPaquete(usuarioId: string): Promise<void> {
+  const db = await baseLocal();
+  await db.runAsync('DELETE FROM paquete_datos WHERE usuario_id = ?', usuarioId);
+}

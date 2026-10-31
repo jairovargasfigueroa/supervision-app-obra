@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 
-import { BarraSuperior } from '../../componentes/BarraSuperior';
-import { nombreRoles, PANTALLAS_OBRA, tieneAlgunRol } from '../../sesion/roles';
+import { EncabezadoApp } from '../../componentes/EncabezadoApp';
+import { PANTALLAS_OBRA, tieneAlgunRol } from '../../sesion/roles';
 import { useSesion } from '../../sesion/sesion';
 import { SincronizacionProvider } from '../../sync/sincronizacion';
 
@@ -13,7 +13,7 @@ export const unstable_settings = { initialRouteName: '(pestanas)' };
 // Cada pantalla de obra solo existe para su rol (Stack.Protected). Con la sesión abierta corre la
 // sincronización de la cola (101) del usuario.
 export default function AppLayout() {
-  const { sesion, cerrarSesion, obtenerToken } = useSesion();
+  const { sesion, obtenerToken } = useSesion();
   const usuario = sesion.estado === 'activa' ? sesion.usuario : null;
   const roles = usuario?.roles ?? [];
 
@@ -21,12 +21,7 @@ export default function AppLayout() {
     <Stack
       screenOptions={{
         header: ({ back, navigation }) => (
-          <BarraSuperior
-            nombre={usuario?.nombre ?? ''}
-            rol={nombreRoles(roles)}
-            onCerrarSesion={() => void cerrarSesion()}
-            onVolver={back ? () => navigation.goBack() : undefined}
-          />
+          <EncabezadoApp onVolver={back ? () => navigation.goBack() : undefined} />
         ),
       }}
     >

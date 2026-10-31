@@ -8,6 +8,8 @@ import { tokenDeUsuario } from './pruebas/jwt';
 import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './sesion/keycloak';
 import { RenovacionRechazada } from './sesion/renovacion';
 import { guardarTokens, leerTokens } from './sesion/tokens';
+import { agregar, listar } from './sync/cola';
+import { guardarPaquete, leerPaquete } from './sync/paquete';
 
 // Las pruebas de navegación usan las rutas reales de src/app; Keycloak está simulado.
 jest.mock('./sesion/keycloak');
@@ -170,6 +172,45 @@ describe('cerrar sesión desde la barra superior', () => {
     await expect(leerTokens()).resolves.toBeNull();
     expect(jest.mocked(cerrarSesionKeycloak)).toHaveBeenCalledWith('r1');
     expect(iniciarMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('cerrar sesión con registros sin enviar (101, criterio 18)', () => {
+  const pendiente = (id: string) => ({
+    idOperacion: id,
+    usuarioId: 'id-usuario1',
+    usuarioNombre: 'Juan Pérez',
+    tipo: 'MOVIMIENTO_MATERIAL' as const,
+    obraId: 'o1',
+    datos: { id },
+    descripcion: 'Ingreso · 5 bolsas de Cemento IP-30',
+  });
+
+  it('avisa, conserva la cola y borra los datos descargados', async () => {
+    await agregar(pendiente('a'));
+    await agregar(pendiente('b'));
+    await guardarPaquete(
+      'id-usuario1',
+      { versionDatos: 'v1', generadoEn: '2026-11-15T13:00:00Z', obras: [], materiales: [] },
+      '2026-11-15T13:00:00Z',
+    );
+    await entrarCon(['almacenero']);
+
+    await fireEvent.press(await screen.findByLabelText('Cerrar sesión'));
+    const aviso =
+      'Tienes 2 registros sin enviar; se enviarán cuando vuelvas a iniciar sesión con este usuario';
+    expect(await screen.findByText(aviso)).toBeTruthy();
+
+    await fireEvent.press(screen.getByText('Cancelar'));
+    await waitFor(() => expect(screen.queryByText(aviso)).toBeNull());
+    await expect(leerTokens()).resolves.not.toBeNull();
+
+    await fireEvent.press(screen.getByLabelText('Cerrar sesión'));
+    await fireEvent.press(await screen.findByText('Cerrar sesión'));
+    expect(await screen.findByText('Iniciar sesión')).toBeTruthy();
+    await expect(leerTokens()).resolves.toBeNull();
+    await expect(leerPaquete('id-usuario1')).resolves.toBeNull();
+    expect((await listar('id-usuario1')).map((o) => o.idOperacion)).toEqual(['a', 'b']);
   });
 });
 
