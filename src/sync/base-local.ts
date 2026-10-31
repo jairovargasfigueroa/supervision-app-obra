@@ -34,6 +34,12 @@ export const MIGRACIONES: readonly string[] = [
     descargado_en  TEXT NOT NULL
   );
   `,
+  // 102: archivo de la foto guardado en el celular y su subida a S3. Una operación es «liviana lista»
+  // si su estado_archivo es NINGUNO o SUBIDO.
+  `
+  ALTER TABLE operacion_pendiente ADD COLUMN archivo_local TEXT;
+  ALTER TABLE operacion_pendiente ADD COLUMN estado_archivo TEXT NOT NULL DEFAULT 'NINGUNO';
+  `,
 ];
 
 /** Aplica las migraciones que falten, todas en una transacción junto con el nuevo `user_version`. */

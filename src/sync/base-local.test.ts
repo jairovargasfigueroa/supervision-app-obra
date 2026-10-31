@@ -42,6 +42,20 @@ describe('baseLocal', () => {
     ]);
   });
 
+  it('una base de la 101 (versión 1) se lleva a la 102 sin perder la cola (archivo_local, estado_archivo)', async () => {
+    const vieja = baseSimulada(NOMBRE_BASE);
+    vieja.exec(MIGRACIONES[0]!);
+    vieja.exec('PRAGMA user_version = 1');
+    vieja.exec(`INSERT INTO operacion_pendiente (id_operacion, usuario_id, usuario_nombre, tipo, obra_id, datos, descripcion, estado, creada_en)
+      VALUES ('a', 'u1', 'Ana', 'MOVIMIENTO_MATERIAL', 'o1', '{}', 'Ingreso', 'PENDIENTE', '2026-11-15T14:00:00.000Z')`);
+
+    const db = await baseLocal();
+    await expect(db.getFirstAsync('PRAGMA user_version')).resolves.toEqual({ user_version: MIGRACIONES.length });
+    await expect(
+      db.getFirstAsync('SELECT id_operacion, archivo_local, estado_archivo FROM operacion_pendiente'),
+    ).resolves.toEqual({ id_operacion: 'a', archivo_local: null, estado_archivo: 'NINGUNO' });
+  });
+
   it('no abre una base de una versión más nueva de la app', async () => {
     baseSimulada(NOMBRE_BASE).exec(`PRAGMA user_version = ${MIGRACIONES.length + 1}`);
     await expect(baseLocal()).rejects.toThrow('versión más nueva');

@@ -51,6 +51,13 @@ describe('cola de envíos', () => {
     });
   });
 
+  it('una operación con archivo queda con el archivo PENDIENTE de subir (102)', async () => {
+    const sinArchivo = await agregar(nueva('a'), T0);
+    const conArchivo = await agregar(nueva('f', 'u1', { tipo: 'FOTO_AVANCE', archivoLocal: 'file:///doc/pendientes/f.jpg' }), T0);
+    expect(sinArchivo).toMatchObject({ archivoLocal: null, estadoArchivo: 'NINGUNO' });
+    expect(conArchivo).toMatchObject({ archivoLocal: 'file:///doc/pendientes/f.jpg', estadoArchivo: 'PENDIENTE' });
+  });
+
   it('el mismo idOperacion dos veces no se duplica', async () => {
     await agregar(nueva('a'), T0);
     const otra = await agregar(nueva('a', 'u1', { descripcion: 'otra' }), mas(5000));

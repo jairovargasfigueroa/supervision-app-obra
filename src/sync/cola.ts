@@ -5,8 +5,14 @@ import { baseLocal } from './base-local';
 
 export type EstadoOperacion = 'PENDIENTE' | 'ENVIANDO' | 'ENVIADO' | 'RECHAZADO';
 
-/** Tipos de operación de Sincronización que registra la app (101). */
-export type TipoOperacion = 'MOVIMIENTO_MATERIAL';
+/** Tipos de operación de Sincronización que registra la app (101, 102). */
+export type TipoOperacion = 'MOVIMIENTO_MATERIAL' | 'FOTO_AVANCE';
+
+/**
+ * Archivo de la operación (102): `NINGUNO` (sin archivo), `PENDIENTE` (falta subirlo), `SUBIENDO` o
+ * `SUBIDO` (ya está en S3; el registro puede ir en un lote).
+ */
+export type EstadoArchivo = 'NINGUNO' | 'PENDIENTE' | 'SUBIENDO' | 'SUBIDO';
 
 export type NuevaOperacion = {
   /** UUID creado en el celular; en un registro nuevo es también su `id`. */
@@ -20,9 +26,13 @@ export type NuevaOperacion = {
   datos: Record<string, unknown>;
   /** Texto corto para «Pendientes de envío», p. ej. «Salida · 12,5 bolsas de Cemento IP-30 · P-01». */
   descripcion: string;
+  /** Ruta del archivo guardado en el celular que hay que subir antes de enviar el registro (102). */
+  archivoLocal?: string | null;
 };
 
 export type Operacion = NuevaOperacion & {
+  archivoLocal: string | null;
+  estadoArchivo: EstadoArchivo;
   estado: EstadoOperacion;
   intentos: number;
   /** ISO; `null` = se puede enviar ya. */
@@ -58,6 +68,8 @@ type Fila = {
   respuesta: string | null;
   creada_en: string;
   enviada_en: string | null;
+  archivo_local: string | null;
+  estado_archivo: EstadoArchivo;
 };
 
 function leerJson(texto: string | null): unknown {
@@ -80,6 +92,8 @@ function desdeFila(f: Fila): Operacion {
     obraId: f.obra_id,
     datos: (leerJson(f.datos) ?? {}) as Record<string, unknown>,
     descripcion: f.descripcion,
+    archivoLocal: f.archivo_local,
+    estadoArchivo: f.estado_archivo,
     estado: f.estado,
     intentos: f.intentos,
     proximoIntentoEn: f.proximo_intento_en,
@@ -129,8 +143,9 @@ export async function agregar(nueva: NuevaOperacion, ahora: Date = new Date()): 
   const db = await baseLocal();
   await db.runAsync(
     `INSERT INTO operacion_pendiente
-       (id_operacion, usuario_id, usuario_nombre, tipo, obra_id, datos, descripcion, estado, creada_en)
-     VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDIENTE', ?)
+       (id_operacion, usuario_id, usuario_nombre, tipo, obra_id, datos, descripcion, estado, creada_en,
+        archivo_local, estado_archivo)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 'PENDIENTE', ?, ?, ?)
      ON CONFLICT (id_operacion) DO NOTHING`,
     nueva.idOperacion,
     nueva.usuarioId,
@@ -140,6 +155,8 @@ export async function agregar(nueva: NuevaOperacion, ahora: Date = new Date()): 
     JSON.stringify(nueva.datos),
     nueva.descripcion,
     ahora.toISOString(),
+    nueva.archivoLocal ?? null,
+    nueva.archivoLocal ? 'PENDIENTE' : 'NINGUNO',
   );
   avisar();
   const guardada = await obtener(nueva.idOperacion);

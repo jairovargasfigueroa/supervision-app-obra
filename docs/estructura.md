@@ -4,7 +4,7 @@ Obligatorio para todo el código de este proyecto. Instala todo con `npx expo in
 
 ## Librerías
 
-Expo SDK 58, `expo-router`, `react-native-paper` 5 + `react-native-safe-area-context` + `@expo/vector-icons` (MaterialCommunityIcons), `expo-font` + `expo-asset` (lo pide `expo-font`) + `@expo-google-fonts/inter`, `@tanstack/react-query` 5, `@tanstack/react-form` 1 + `zod` 4, `expo-auth-session`, `expo-secure-store`, `expo-crypto`, `expo-image-picker`, `expo-image-manipulator`, `expo-sqlite` (capa 1). Expo Router necesita además `expo-linking`, `expo-constants`, `react-native-screens`, `expo-web-browser` (lo usa `expo-auth-session`) y `react-dom` (dependencia de `@expo/metro-runtime`; fijada en `19.3.0`, la del SDK, porque si npm la elige sola toma una que pide otro React y `npm install` falla con `ERESOLVE`). Pruebas: `jest-expo` + `@testing-library/react-native` 14.
+Expo SDK 58, `expo-router`, `react-native-paper` 5 + `react-native-safe-area-context` + `@expo/vector-icons` (MaterialCommunityIcons), `expo-font` + `expo-asset` (lo pide `expo-font`) + `@expo-google-fonts/inter`, `@tanstack/react-query` 5, `@tanstack/react-form` 1 + `zod` 4, `expo-auth-session`, `expo-secure-store`, `expo-crypto`, `expo-image-picker`, `expo-image-manipulator`, `expo-sqlite` (capa 1), `expo-file-system` (102: la foto se guarda en `documentDirectory/pendientes/` hasta que se sube). Expo Router necesita además `expo-linking`, `expo-constants`, `react-native-screens`, `expo-web-browser` (lo usa `expo-auth-session`) y `react-dom` (dependencia de `@expo/metro-runtime`; fijada en `19.3.0`, la del SDK, porque si npm la elige sola toma una que pide otro React y `npm install` falla con `ERESOLVE`). Pruebas: `jest-expo` + `@testing-library/react-native` 14.
 
 `expo-image-picker` se configura con su *config plugin* en `app.json` → `plugins`: textos de permiso de cámara y fotos en español y `microphonePermission: false` (la app no graba video, así Android no pide el micrófono).
 
@@ -60,7 +60,8 @@ src/
                    SelectorMaterial.tsx (con búsqueda), SelectorPartida.tsx
   sync/            (capa 1, 101) dispositivo.ts (idDispositivo: UUID creado una vez y guardado en secure-store),
                    base-local.ts (expo-sqlite: tablas operacion_pendiente y paquete_datos, migraciones por
-                   PRAGMA user_version en una transacción, una sola conexión), paquete.ts (descarga del
+                   PRAGMA user_version en una transacción, una sola conexión; la 2, de la 102, agrega
+                   archivo_local y estado_archivo), paquete.ts (descarga del
                    paquete de datos con la versión guardada, guardado por usuario y lectura), cola.ts
                    (operaciones con su UUID: agregar sin duplicar, listar y contar por usuario, descartar
                    PENDIENTE o RECHAZADO, tomar hasta 20 listas en orden y marcarlas ENVIANDO, marcar
