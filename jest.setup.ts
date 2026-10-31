@@ -17,6 +17,9 @@ jest.mock('expo-secure-store', () => jest.requireActual('./src/pruebas/secure-st
 // Base local simulada: SQLite real en memoria de Node (src/pruebas/sqlite-simulado.ts, se vacía antes de cada prueba).
 jest.mock('expo-sqlite', () => jest.requireActual('./src/pruebas/sqlite-simulado'));
 
+// Archivos del celular en memoria (src/pruebas/archivos-simulados.ts, se vacían antes de cada prueba).
+jest.mock('expo-file-system', () => jest.requireActual('./src/pruebas/archivos-simulados'));
+
 // Red del celular: el simulado oficial de NetInfo (con conexión; las pruebas cambian lo que avisa).
 jest.mock('@react-native-community/netinfo', () =>
   jest.requireActual('@react-native-community/netinfo/jest/netinfo-mock.js'),
@@ -55,6 +58,7 @@ beforeEach(() => {
     'expo-secure-store',
   ).reiniciarSecureStore();
   jest.requireMock<typeof import('./src/pruebas/sqlite-simulado')>('expo-sqlite').reiniciarSqlite();
+  jest.requireMock<typeof import('./src/pruebas/archivos-simulados')>('expo-file-system').reiniciarArchivos();
   jest.requireActual<typeof import('./src/sync/base-local')>('./src/sync/base-local').olvidarBaseLocal();
   jest.requireActual<typeof import('./src/sync/dispositivo')>('./src/sync/dispositivo').olvidarIdDispositivo();
   jest.requireActual<typeof import('./src/pruebas/imagen-simulada')>(

@@ -1,6 +1,5 @@
 import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
-import { ImageManipulator } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
 import NetInfo from '@react-native-community/netinfo';
@@ -9,6 +8,7 @@ import { jsonRespuesta, simularFetch } from './pruebas/fetch-simulado';
 import { tokenDeUsuario } from './pruebas/jwt';
 import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './sesion/keycloak';
 import { RenovacionRechazada } from './sesion/renovacion';
+import { archivosSimulados } from './pruebas/archivos-simulados';
 import { guardarTokens, leerTokens } from './sesion/tokens';
 import type { PaqueteDatos } from './api/sincronizacion';
 import { agregar, listar, marcarRechazada, obtener, tomarParaEnvio } from './sync/cola';
@@ -356,36 +356,13 @@ describe('obras del almacenero (004, criterio 1)', () => {
   );
 });
 
-describe('enviar la foto de avance (005)', () => {
-  const blob = { tamano: 1 } as unknown as Blob;
-  const cuerpo = (init: RequestInit) => JSON.parse(String(init.body));
-  const fotoIdsPedidos: string[] = [];
-
+describe('enviar la foto de avance (005 con la cola de la 102)', () => {
   beforeEach(() => {
-    fotoIdsPedidos.length = 0;
-    obras['GET /obras/o1'] = () => jsonRespuesta(200, DETALLE);
-    obras['POST /obras/o1/fotos/url-subida'] = (init) => {
-      const { fotoId } = cuerpo(init);
-      fotoIdsPedidos.push(fotoId);
-      return jsonRespuesta(200, {
-        url: `https://s3.test/subida/${fotoId}`,
-        claveArchivo: `fotos/o1/${fotoId}.jpg`,
-        expiraEn: '2999-01-01T00:00:00Z',
-      });
-    };
-    obras['GET file:///comprimida.jpg'] = () => ({ blob: () => Promise.resolve(blob) }) as unknown as Response;
-    obras['POST /obras/o1/fotos'] = (init) => jsonRespuesta(201, { ...cuerpo(init), registradoPor: 'id-usuario1' });
+    obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([OBRA_PAQUETE]));
     jest.mocked(ImagePicker.launchCameraAsync).mockResolvedValue({
       canceled: false,
       assets: [{ uri: 'file:///original.jpg', width: 4000, height: 3000 }],
     });
-    // El almacenamiento (S3) acepta el PUT a cualquier URL firmada.
-    const servicios = fetchMock.getMockImplementation()!;
-    fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) =>
-      init.method === 'PUT' && url.startsWith('https://s3.test/')
-        ? new Response(null, { status: 200 })
-        : servicios(url, init),
-    );
   });
 
   const prepararFoto = async () => {
@@ -395,76 +372,48 @@ describe('enviar la foto de avance (005)', () => {
     await fireEvent.press(screen.getByRole('button', { name: /Tomar foto/ }));
     await screen.findByTestId('vista-previa');
   };
-  const llamadas = (clave: string) =>
-    fetchMock.mock.calls.filter(
-      ([url, init = {}]: [string, RequestInit?]) =>
-        `${init.method ?? 'GET'} ${url.replace('http://localhost:8081', '')}` === clave,
-    );
 
-  it('«Enviar» sube la foto con la URL firmada y la registra con partida y fecha (criterio 3)', async () => {
+  it('«Enviar» guarda la foto en el celular y la pone en la cola con partida y fecha (102, criterio 1)', async () => {
     await prepararFoto();
     await fireEvent.press(screen.getByRole('button', { name: /Enviar/ }));
-    expect(await screen.findByText('Foto enviada.')).toBeTruthy();
+    expect(await screen.findByText('Guardado en el celular · se enviará cuando haya señal')).toBeTruthy();
 
-    const [fotoId] = fotoIdsPedidos;
-    const [[, put]] = llamadas(`PUT https://s3.test/subida/${fotoId}`);
-    expect(put).toMatchObject({ method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } });
-    const [[, registro]] = llamadas('POST /obras/o1/fotos');
-    expect(cuerpo(registro)).toEqual({
-      id: fotoId,
-      partidaId: 'p1',
-      claveArchivo: `fotos/o1/${fotoId}.jpg`,
-      tomadaEn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+    const [op] = await listar('id-usuario1');
+    expect(op).toMatchObject({
+      tipo: 'FOTO_AVANCE',
+      obraId: 'o1',
+      estado: 'PENDIENTE',
+      estadoArchivo: 'PENDIENTE',
+      archivoLocal: `file:///documento/pendientes/${op.idOperacion}.jpg`,
+      descripcion: 'Foto de avance · P-01 · Losa de hormigón armado',
+      datos: {
+        id: op.idOperacion,
+        obraId: 'o1',
+        partidaId: 'p1',
+        tomadaEn: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+      },
     });
-    // La foto enviada se quita: la siguiente es un registro nuevo.
+    expect(archivosSimulados()).toEqual([op.archivoLocal]);
+    // La foto guardada se quita: la siguiente es un registro nuevo; la partida queda elegida.
     expect(screen.queryByTestId('vista-previa')).toBeNull();
   });
 
-  it('si url-subida responde 503, dice que no se pudo y «Reintentar» usa el mismo fotoId (criterio 5)', async () => {
-    const pedirUrl = obras['POST /obras/o1/fotos/url-subida']!;
-    obras['POST /obras/o1/fotos/url-subida'] = (init) => {
-      fotoIdsPedidos.push(cuerpo(init).fotoId);
-      return jsonRespuesta(503, { codigo: 'SERVICIO_NO_DISPONIBLE' }, 'application/problem+json');
-    };
+  it('con más de 100 fotos sin enviar avisa, pero deja tomar más (102, criterio 3)', async () => {
+    for (let i = 0; i < 101; i++) {
+      await agregar({
+        idOperacion: `f${i}`,
+        usuarioId: 'id-usuario1',
+        usuarioNombre: 'Juan Pérez',
+        tipo: 'FOTO_AVANCE',
+        obraId: 'o1',
+        datos: { id: `f${i}`, obraId: 'o1', partidaId: 'p1', tomadaEn: '2026-11-15T14:00:00Z' },
+        descripcion: 'Foto de avance',
+        archivoLocal: `file:///documento/pendientes/f${i}.jpg`,
+      });
+    }
     await prepararFoto();
-    await fireEvent.press(screen.getByRole('button', { name: /Enviar/ }));
-
-    expect(await screen.findByText('No se pudo enviar.')).toBeTruthy();
-    expect(
-      screen.getByText('Este servicio no está disponible por el momento. Intenta de nuevo en unos minutos.'),
-    ).toBeTruthy();
-    expect(screen.getByTestId('vista-previa')).toBeTruthy();
-    expect(llamadas('POST /obras/o1/fotos')).toHaveLength(0);
-
-    obras['POST /obras/o1/fotos/url-subida'] = pedirUrl;
-    await fireEvent.press(screen.getByRole('button', { name: /Reintentar/ }));
-    expect(await screen.findByText('Foto enviada.')).toBeTruthy();
-
-    expect(fotoIdsPedidos).toHaveLength(2);
-    expect(fotoIdsPedidos[1]).toBe(fotoIdsPedidos[0]);
-    expect(cuerpo(llamadas('POST /obras/o1/fotos')[0][1]).id).toBe(fotoIdsPedidos[0]);
-    // Sin volver a tomar ni a comprimir la foto.
-    expect(ImagePicker.launchCameraAsync).toHaveBeenCalledTimes(1);
-    expect(ImageManipulator.manipulate).toHaveBeenCalledTimes(1);
-    expect(llamadas('GET file:///comprimida.jpg')).toHaveLength(1);
-  });
-
-  it('un registro repetido (200) cuenta como enviado (criterio 4)', async () => {
-    obras['POST /obras/o1/fotos'] = (init) => jsonRespuesta(200, cuerpo(init));
-    await prepararFoto();
-    await fireEvent.press(screen.getByRole('button', { name: /Enviar/ }));
-    expect(await screen.findByText('Foto enviada.')).toBeTruthy();
-    expect(screen.queryByText('No se pudo enviar.')).toBeNull();
-  });
-
-  it('si la partida no es de la obra, lo dice y ofrece «Actualizar datos»', async () => {
-    obras['POST /obras/o1/fotos'] = () =>
-      jsonRespuesta(422, { codigo: 'PARTIDA_NO_ES_DE_LA_OBRA' }, 'application/problem+json');
-    await prepararFoto();
-    await fireEvent.press(screen.getByRole('button', { name: /Enviar/ }));
-    expect(await screen.findByText('La partida elegida no pertenece a esta obra.')).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Actualizar datos/ })).toBeTruthy();
-    expect(screen.getByTestId('vista-previa')).toBeTruthy();
+    expect(await screen.findByText('Tienes 101 fotos sin enviar; busca señal para enviarlas')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Enviar/ })).not.toBeDisabled();
   });
 });
 

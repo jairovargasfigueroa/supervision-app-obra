@@ -46,13 +46,13 @@ src/
   api/             red.ts (única llamada a fetch), cliente.ts (token, tiempo máximo, X-Request-Id, errores por
                    codigo, URL de cada servicio, validación Zod de la respuesta; QueryClient con reintentos
                    1-2-4 s de las consultas), errores.ts (ErrorApi y textos de docs/mensajes.md),
-                   obras.ts (GET /obras/{id} y fotos, 005), materiales.ts (tipos y respuesta de POST /movimientos), subida.ts (lee la foto y hace el PUT a S3),
+                   materiales.ts (tipos y respuesta de POST /movimientos), subida.ts (PUT de la foto a S3),
                    sincronizacion.ts (101: GET /paquete-datos con X-Dispositivo-Id e If-None-Match, `null` con 304;
                    POST /lotes con tiempo máximo de 30 s, un resultado por operación)
   formularios/     movimiento.esquema.ts (campos y cuerpo de POST /movimientos, Zod), movimiento.ts (avisos de
                    stock superado, con la respuesta o con el stock mostrado), useMovimiento.ts (TanStack Form
                    sobre el paquete local + registro en la cola, 101), foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
-                   foto.envio.ts (envío con reintento y qué hacer tras cada fallo), useFotoAvance.ts (estado de la pantalla)
+                   useFotoAvance.ts (estado de la pantalla; desde la 102 guarda la foto y la pone en la cola)
   componentes/     BarraSuperior.tsx, EncabezadoApp.tsx (barra con sesión: «Cerrar sesión» con aviso de pendientes, 101), PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
                    ObrasAsignadas.tsx (obras del paquete local, con «Sin señal · datos del …»), TituloObra.tsx,
                    AvisoSinSenal.tsx (101), PendientesEnvio.tsx (pantalla «Pendientes de envío», 101), ConObraLocal.tsx (la obra del paquete guardado, 101), FormularioMovimiento.tsx
@@ -66,7 +66,8 @@ src/
                    (operaciones con su UUID: agregar sin duplicar, listar y contar por usuario, descartar
                    PENDIENTE o RECHAZADO, tomar hasta 20 listas en orden y marcarlas ENVIANDO, marcar
                    ENVIADO / RECHAZADO / reintento; al abrir la app ENVIANDO → PENDIENTE y se borran los
-                   ENVIADO de hace más de 24 h), enviador.ts (envío por lotes con candado, espera creciente),
+                   ENVIADO de hace más de 24 h), archivos.ts (102: foto en documentDirectory/pendientes/,
+                   abrir y borrar), enviador.ts (envío por lotes con candado, espera creciente),
                    red.ts (NetInfo: conexión = isConnected y internet no inalcanzable), disparadores.ts (al
                    volver la señal, al volver a primer plano, cada 60 s con pendientes), sincronizacion.tsx
                    (SincronizacionProvider y useSincronizacion: contador, red, «Enviar ahora», «Actualizar datos»,
@@ -75,7 +76,8 @@ src/
   nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
                    estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
-                   sqlite-simulado.ts (expo-sqlite sobre node:sqlite en memoria), imagen-simulada.ts (cámara, galería y compresión)
+                   sqlite-simulado.ts (expo-sqlite sobre node:sqlite en memoria), archivos-simulados.ts
+                   (expo-file-system en memoria), imagen-simulada.ts (cámara, galería y compresión)
   tema.ts
 ```
 
@@ -94,13 +96,11 @@ src/
 ## Foto de avance (005)
 
 - Se llega a `obras/[id]/foto` de dos formas (criterio 1): desde «Mis obras», con el botón «Foto de avance» de cada obra (solo `maestro`), o desde la pestaña «Foto de avance», que lista las mismas obras («Elige la obra») y lleva a la pantalla de la que se pulse. Las dos usan `ObrasAsignadas`: desde la 101, las obras del paquete de datos guardado (obras asignadas en ejecución que Sincronización pide a Obras); con «tirar para actualizar» se vuelve a pedir el paquete y, sin conexión, arriba va «Sin señal · datos del dd/mm hh:mm». Si nunca se descargó: «Necesitas señal la primera vez para descargar tus obras» con «Reintentar».
-- La pantalla carga la obra con `GET /obras/{id}` (partidas en `SelectorPartida`), toma la foto con la cámara (pide el permiso) o la elige de la galería (`expo-image-picker`, `mediaTypes: ['images']`, `quality: 1` para comprimir una sola vez) y la reduce con `expo-image-manipulator` (`ImageManipulator.manipulate` → `resize` del lado más largo a 1600 px si lo pasa → `saveAsync({ compress: 0.8, format: JPEG })`). Las medidas se leen de la imagen cargada por el manipulador, que ya tiene aplicada la orientación.
+- La pantalla carga la obra del paquete guardado con `ConObraLocal` (102; partidas en `SelectorPartida`), toma la foto con la cámara (pide el permiso) o la elige de la galería (`expo-image-picker`, `mediaTypes: ['images']`, `quality: 1` para comprimir una sola vez) y la reduce con `expo-image-manipulator` (`ImageManipulator.manipulate` → `resize` del lado más largo a 1280 px si lo pasa → `saveAsync({ compress: 0.7, format: JPEG })`). Las medidas se leen de la imagen cargada por el manipulador, que ya tiene aplicada la orientación.
 - `tomadaEn`: con la cámara, el momento en que vuelve la foto; de la galería, `DateTimeOriginal` del EXIF (con `OffsetTimeOriginal` si lo trae; si no, en la hora del celular), o el momento actual si no hay fecha válida o es futura.
 - No usa TanStack Form: no hay campos de texto (solo partida y foto). `foto.esquema.ts` (Zod) dice qué falta para enviar y la pantalla lo muestra bajo «Enviar».
 - El `fotoId` (UUID de `expo-crypto`) se crea al tener la foto; una foto nueva es un registro nuevo. La pantalla lleva `key={id}` para empezar de cero en cada obra.
-- «Enviar» (`foto.envio.ts`, con `useMutation` sin reintentos automáticos): `POST /obras/{obraId}/fotos/url-subida` con el `fotoId` → lee el archivo comprimido (`file://`) y lo sube con `PUT` a la URL firmada (`Content-Type: image/jpeg`, sin token, 60 s como máximo) → `POST /obras/{obraId}/fotos` con `{ id: fotoId, partidaId, claveArchivo, tomadaEn }`. `201` y `200` (ya existía, criterio 4) son éxito: «Foto enviada.» y se quita la foto (la siguiente es un registro nuevo); la partida queda elegida.
-- Reintento (criterio 5): lo hecho queda en memoria (`EnvioFoto`: `fotoId`, archivo comprimido, última URL y si ya se subió) hasta que se registra. «Reintentar» sigue desde el paso que falló, con el mismo `fotoId` y el mismo archivo, sin volver a tomar ni comprimir la foto: si ya se subió, solo registra; si la URL vence en menos de 30 s, o S3 rechaza el `PUT` con `403` (URL vencida), pide otra con el mismo `fotoId`.
-- Tras un fallo se muestra «No se pudo enviar.» con el texto de `docs/mensajes.md`, y `decidirTrasFallo` (función pura) elige qué ofrecer: sin señal, tiempo agotado, `429`, `5xx` (también `503 SERVICIO_NO_DISPONIBLE` mientras no exista el bucket) o un rechazo de S3 → «Reintentar»; `422 PARTIDA_NO_ES_DE_LA_OBRA` → «Actualizar datos» y elegir otra partida (mismo `fotoId`); `422 CLAVE_ARCHIVO_INVALIDA`, `413`, `400` o la foto perdida → se descarta la foto para tomar otra; `403` y `404 OBRA_NO_ENCONTRADA` → sin reintento; `401` o sesión terminada → «Iniciar sesión».
+- «Enviar» (102): mueve la foto comprimida a `documentDirectory/pendientes/{fotoId}.jpg` (`sync/archivos.ts`, `expo-file-system`) y la agrega a la cola como `FOTO_AVANCE` (`idOperacion` = `fotoId`; `datos` `{ id, obraId, partidaId, tomadaEn }`; `archivo_local` con la ruta y `estado_archivo` `PENDIENTE`; descripción «Foto de avance · P-01 · Losa de hormigón armado»), dispara el envío y espera hasta 5 s: «Foto enviada.» si quedó `ENVIADO`, el motivo si quedó `RECHAZADO`, si no «Guardado en el celular · se enviará cuando haya señal». La foto se quita (la siguiente es un registro nuevo) y la partida queda elegida. Con más de 100 fotos del usuario sin enviar, arriba de «Enviar»: «Tienes N fotos sin enviar; busca señal para enviarlas» (no impide tomar más).
 
 ## Movimientos de material (004)
 

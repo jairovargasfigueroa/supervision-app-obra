@@ -6,7 +6,6 @@ import {
   urlServicio,
 } from './cliente';
 import { ErrorApi, esReintentable, mensajeDeFallo, type FalloApi } from './errores';
-import { obtenerObra, registrarFoto } from './obras';
 import { jsonRespuesta, simularFetch } from '../pruebas/fetch-simulado';
 
 const token = () => Promise.resolve('token-1');
@@ -142,31 +141,3 @@ describe('mensajes (docs/mensajes.md)', () => {
   });
 });
 
-describe('Obras', () => {
-  it('GET /obras/{id} contra obrasUrl de app.json', async () => {
-    fetchMock
-      .mockResolvedValueOnce(
-        jsonRespuesta(200, {
-          id: 'o1', nombre: 'Edificio', ubicacion: 'SCZ', estado: 'EN_EJECUCION',
-          partidas: [{ id: 'p1', codigo: 'P-01', nombre: 'Losa', unidad: 'm2' }],
-        }),
-      );
-    await expect(obtenerObra('o1', token)).resolves.toMatchObject({ partidas: [{ codigo: 'P-01' }] });
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['http://localhost:8081/obras/o1']);
-  });
-
-  it('una respuesta fuera del contrato es respuesta-invalida', async () => {
-    fetchMock.mockResolvedValue(jsonRespuesta(200, { id: 1 }));
-    await expect(falloDe(obtenerObra('o1', token))).resolves.toEqual({ tipo: 'respuesta-invalida' });
-  });
-
-  it('registrarFoto: 201 es nueva y 200 es repetida (criterio 4)', async () => {
-    const registro = { id: 'f1', partidaId: 'p1', claveArchivo: 'fotos/o1/f1.jpg', tomadaEn: '2026-11-15T15:20:00Z' };
-    fetchMock
-      .mockResolvedValueOnce(jsonRespuesta(201, { id: 'f1', partidaId: 'p1' }))
-      .mockResolvedValueOnce(jsonRespuesta(200, { id: 'f1', partidaId: 'p1' }));
-    await expect(registrarFoto('o1', registro, token)).resolves.toMatchObject({ yaExistia: false });
-    await expect(registrarFoto('o1', registro, token)).resolves.toMatchObject({ yaExistia: true });
-    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual(registro);
-  });
-});

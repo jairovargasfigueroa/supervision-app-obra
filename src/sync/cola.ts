@@ -245,8 +245,9 @@ export async function adelantarPendientes(usuarioId: string): Promise<void> {
 }
 
 /**
- * Toma hasta 20 operaciones `PENDIENTE` del usuario listas para enviar (`proximo_intento_en`
- * vencido o nulo), en el orden en que se registraron, y las marca `ENVIANDO`.
+ * Toma hasta 20 operaciones `PENDIENTE` «livianas listas» del usuario (sin archivo, o con el archivo ya
+ * subido, 102) con `proximo_intento_en` vencido o nulo, en el orden en que se registraron, y las marca
+ * `ENVIANDO`.
  */
 export async function tomarParaEnvio(
   usuarioId: string,
@@ -259,6 +260,7 @@ export async function tomarParaEnvio(
     const filas = await db.getAllAsync<Fila>(
       `SELECT * FROM operacion_pendiente
        WHERE usuario_id = ? AND estado = 'PENDIENTE'
+         AND estado_archivo IN ('NINGUNO', 'SUBIDO')
          AND (proximo_intento_en IS NULL OR proximo_intento_en <= ?)
        ${ORDEN} LIMIT ?`,
       usuarioId,
