@@ -34,6 +34,7 @@ src/
     (app)/(pestanas)/ingreso.tsx     # pestaña Ingreso (almacenero)
     (app)/(pestanas)/salida.tsx      # pestaña Salida (almacenero)
     (app)/(pestanas)/stock.tsx       # pestaña Stock (almacenero)
+    (app)/(pestanas)/pendientes.tsx  # pestaña Pendientes con contador (maestro y almacenero, 101)
     (app)/obras/[id]/foto.tsx        # maestro (005)
     (app)/obras/[id]/ingreso.tsx     # almacenero
     (app)/obras/[id]/salida.tsx      # almacenero
@@ -54,7 +55,7 @@ src/
                    foto.envio.ts (envío con reintento y qué hacer tras cada fallo), useFotoAvance.ts (estado de la pantalla)
   componentes/     BarraSuperior.tsx, EncabezadoApp.tsx (barra con sesión: «Cerrar sesión» con aviso de pendientes, 101), PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
                    ObrasAsignadas.tsx (obras del paquete local, con «Sin señal · datos del …»), TituloObra.tsx,
-                   AvisoSinSenal.tsx (101), ConObraLocal.tsx (la obra del paquete guardado, 101), FormularioMovimiento.tsx
+                   AvisoSinSenal.tsx (101), PendientesEnvio.tsx (pantalla «Pendientes de envío», 101), ConObraLocal.tsx (la obra del paquete guardado, 101), FormularioMovimiento.tsx
                    (ingreso y salida), StockObra.tsx,
                    SelectorMaterial.tsx (con búsqueda), SelectorPartida.tsx
   sync/            (capa 1, 101) dispositivo.ts (idDispositivo: UUID creado una vez y guardado en secure-store),

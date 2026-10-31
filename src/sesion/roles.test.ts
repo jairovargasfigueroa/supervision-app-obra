@@ -11,12 +11,12 @@ import {
 const titulos = (roles: string[]) => pestanasPorRol(roles).map((p) => p.titulo);
 
 describe('pestanasPorRol (criterio 5)', () => {
-  it('maestro → Mis obras y Foto de avance', () => {
-    expect(titulos(['default-roles-supervision', 'maestro'])).toEqual(['Mis obras', 'Foto de avance']);
+  it('maestro → Mis obras y Foto de avance (y Pendientes, 101)', () => {
+    expect(titulos(['default-roles-supervision', 'maestro'])).toEqual(['Mis obras', 'Foto de avance', 'Pendientes']);
   });
 
-  it('almacenero → Mis obras, Ingreso, Salida y Stock', () => {
-    expect(titulos(['almacenero'])).toEqual(['Mis obras', 'Ingreso', 'Salida', 'Stock']);
+  it('almacenero → Mis obras, Ingreso, Salida y Stock (y Pendientes, 101)', () => {
+    expect(titulos(['almacenero'])).toEqual(['Mis obras', 'Ingreso', 'Salida', 'Stock', 'Pendientes']);
   });
 
   it('con los dos roles → la unión sin repetir «Mis obras»', () => {
@@ -26,6 +26,7 @@ describe('pestanasPorRol (criterio 5)', () => {
       'Ingreso',
       'Salida',
       'Stock',
+      'Pendientes',
     ]);
   });
 

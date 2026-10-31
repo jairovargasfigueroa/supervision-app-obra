@@ -60,6 +60,11 @@ export function useSincronizacion(): ValorSincronizacion {
   return valor;
 }
 
+/** El contexto si hay sesión con sincronización (p. ej. para el contador de la pestaña), o `null`. */
+export function useSincronizacionOpcional(): ValorSincronizacion | null {
+  return useContext(ContextoSincronizacion);
+}
+
 export const clavePaquete = (usuarioId: string) => ['sync', 'paquete', usuarioId] as const;
 export const claveCola = (usuarioId: string) => ['sync', 'cola', usuarioId] as const;
 

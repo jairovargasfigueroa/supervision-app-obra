@@ -11,7 +11,7 @@ import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './se
 import { RenovacionRechazada } from './sesion/renovacion';
 import { guardarTokens, leerTokens } from './sesion/tokens';
 import type { PaqueteDatos } from './api/sincronizacion';
-import { agregar, listar } from './sync/cola';
+import { agregar, listar, marcarRechazada, obtener, tomarParaEnvio } from './sync/cola';
 import { guardarPaquete, leerPaquete } from './sync/paquete';
 
 // Las pruebas de navegación usan las rutas reales de src/app; Keycloak está simulado.
@@ -114,7 +114,7 @@ const entrarCon = async (roles: string[], nombre = 'Juan Pérez') => {
 };
 
 const pestanasVisibles = () =>
-  ['Mis obras', 'Foto de avance', 'Ingreso', 'Salida', 'Stock'].filter(
+  ['Mis obras', 'Foto de avance', 'Ingreso', 'Salida', 'Stock', 'Pendientes'].filter(
     (titulo) => screen.queryAllByText(titulo).length > 0,
   );
 
@@ -123,20 +123,20 @@ describe('pestañas según el rol (criterio 5) y barra superior (criterio 11)', 
     await entrarCon(['maestro'], 'Freddy Choque Mamani');
     expect(await screen.findByText('Freddy Choque Mamani')).toBeTruthy();
     expect(screen.getByText('Maestro de obra')).toBeTruthy();
-    expect(pestanasVisibles()).toEqual(['Mis obras', 'Foto de avance']);
+    expect(pestanasVisibles()).toEqual(['Mis obras', 'Foto de avance', 'Pendientes']);
   });
 
   it('almacenero → Mis obras, Ingreso, Salida y Stock', async () => {
     await entrarCon(['almacenero'], 'Rosa Flores');
     expect(await screen.findByText('Rosa Flores')).toBeTruthy();
     expect(screen.getByText('Almacenero')).toBeTruthy();
-    expect(pestanasVisibles()).toEqual(['Mis obras', 'Ingreso', 'Salida', 'Stock']);
+    expect(pestanasVisibles()).toEqual(['Mis obras', 'Ingreso', 'Salida', 'Stock', 'Pendientes']);
   });
 
   it('con los dos roles → la unión, con «Mis obras» una sola vez', async () => {
     await entrarCon(['maestro', 'almacenero']);
     expect(await screen.findByText('Maestro de obra · Almacenero')).toBeTruthy();
-    expect(pestanasVisibles()).toEqual(['Mis obras', 'Foto de avance', 'Ingreso', 'Salida', 'Stock']);
+    expect(pestanasVisibles()).toEqual(['Mis obras', 'Foto de avance', 'Ingreso', 'Salida', 'Stock', 'Pendientes']);
     expect(screen.getAllByText('Mis obras')).toHaveLength(1);
   });
 
@@ -736,5 +736,78 @@ describe('stock de la obra (004, criterio 9; desde la 101, del paquete local)', 
     expect(screen.getByText('Incluye 2 movimientos sin enviar')).toBeTruthy();
     expect(screen.getByTestId('chip-error')).toHaveTextContent('Bajo');
     expect(screen.getByText('Sin señal · datos del 15/11 14:30')).toBeTruthy();
+  });
+});
+
+describe('pendientes de envío (101, criterios 16 y 17)', () => {
+  const operacion = (id: string, descripcion: string) => ({
+    idOperacion: id,
+    usuarioId: 'id-usuario1',
+    usuarioNombre: 'Juan Pérez',
+    tipo: 'MOVIMIENTO_MATERIAL' as const,
+    obraId: 'o1',
+    datos: { id, obraId: 'o1', materialId: 'm1', tipo: 'SALIDA', cantidad: 2, partidaId: 'p1', registradoEn: '2026-10-31T14:00:00Z' },
+    descripcion,
+  });
+  const procesarLote = (init: RequestInit) => {
+    const { operaciones } = JSON.parse(String(init.body)) as { operaciones: { idOperacion: string }[] };
+    return jsonRespuesta(200, {
+      resultados: operaciones.map((o) => ({
+        idOperacion: o.idOperacion,
+        estado: 'PROCESADO',
+        status: 201,
+        respuesta: { id: o.idOperacion, periodo: '2026-11', superaStock: false, stock: { cantidad: 1, minimo: 0, estado: 'OK' } },
+      })),
+    });
+  };
+
+  beforeEach(async () => {
+    await agregar(operacion('a', 'Salida · 2 bolsas de Cemento IP-30 · P-01'));
+    await agregar(operacion('b', 'Salida · 3 bolsas de Cemento IP-30 · P-02'));
+    await agregar(operacion('c', 'Salida · 4 bolsas de Cemento IP-30 · P-01'));
+    await tomarParaEnvio('id-usuario1', new Date(), 1);
+    await marcarRechazada('a', 'PERIODO_CERRADO', 'El periodo 2026-10 ya está cerrado.', { status: 409, codigo: 'PERIODO_CERRADO' });
+  });
+
+  const abrirPendientes = async () => {
+    await entrarCon(['almacenero']);
+    await fireEvent.press(await screen.findByText('Pendientes'));
+    await screen.findByText('Pendientes de envío');
+  };
+
+  it('muestra el contador y cada registro con su estado y, si se rechazó, el motivo', async () => {
+    await abrirPendientes();
+    expect(await screen.findByLabelText('Pendientes: 2')).toBeTruthy();
+    expect(await screen.findByText('Pendiente (2)')).toBeTruthy();
+    expect(screen.getByText('Rechazado (1)')).toBeTruthy();
+    expect(screen.getByText('Salida · 3 bolsas de Cemento IP-30 · P-02')).toBeTruthy();
+    expect(screen.getByTestId('motivo-rechazo')).toHaveTextContent('El periodo 2026-10 ya está cerrado');
+    expect(screen.getAllByText(/^Registrado el \d{2}\/\d{2}\/\d{4} \d{2}:\d{2}$/)).toHaveLength(3);
+  });
+
+  it('«Descartar» pide confirmación y borra el registro', async () => {
+    await abrirPendientes();
+    await fireEvent.press(await screen.findByLabelText('Descartar: Salida · 3 bolsas de Cemento IP-30 · P-02'));
+    expect(await screen.findByText('¿Descartar este registro? No se enviará y no se podrá recuperar.')).toBeTruthy();
+    await fireEvent.press(screen.getByText('Cancelar'));
+    await waitFor(() => expect(screen.queryByText('¿Descartar este registro? No se enviará y no se podrá recuperar.')).toBeNull());
+    expect(await obtener('b')).not.toBeNull();
+
+    await fireEvent.press(screen.getByLabelText('Descartar: Salida · 3 bolsas de Cemento IP-30 · P-02'));
+    const botones = await screen.findAllByText('Descartar');
+    await fireEvent.press(botones[botones.length - 1]);
+    await waitFor(() => expect(screen.queryByText('Salida · 3 bolsas de Cemento IP-30 · P-02')).toBeNull());
+    expect(await obtener('b')).toBeNull();
+    expect(await screen.findByLabelText('Pendientes: 1')).toBeTruthy();
+  });
+
+  it('«Enviar ahora» envía los pendientes sin esperar su próximo intento', async () => {
+    await abrirPendientes();
+    // Al abrir la app el envío falló (Sincronización no respondía): quedaron esperando su próximo intento.
+    await waitFor(() => expect(screen.getByText('Pendiente (2)')).toBeTruthy());
+    obras['POST /lotes'] = procesarLote;
+    await fireEvent.press(screen.getByRole('button', { name: /Enviar ahora/ }));
+    expect(await screen.findByText('Enviado (2)')).toBeTruthy();
+    expect(screen.queryByLabelText(/^Pendientes: /)).toBeNull();
   });
 });

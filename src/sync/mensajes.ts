@@ -1,7 +1,7 @@
 // Textos de la app sin señal (101; docs/mensajes.md de la carpeta general, «App sin señal»).
 import { mensajeDeFallo, mensajePeriodoCerrado } from '../api/errores';
 import { formatearCantidadMaterial, formatearDiaHora, periodoLaPaz } from '../nucleo/formato';
-import type { Operacion } from './cola';
+import type { EstadoOperacion, Operacion } from './cola';
 
 /** Primer uso sin señal: nunca se descargó el paquete (criterio 4). */
 export const MENSAJE_PRIMERA_VEZ_SIN_SENAL = 'Necesitas señal la primera vez para descargar tus obras';
@@ -18,6 +18,20 @@ export function mensajeIncluyeSinEnviar(n: number): string {
 
 /** El servidor no confirmó el registro en 5 s (criterio 8). */
 export const MENSAJE_GUARDADO_EN_CELULAR = 'Guardado en el celular · se enviará cuando haya señal';
+
+/** Estado de un registro en «Pendientes de envío» (criterio 16). */
+export const ETIQUETA_ESTADO: Record<EstadoOperacion, string> = {
+  PENDIENTE: 'Pendiente',
+  ENVIANDO: 'Enviando',
+  ENVIADO: 'Enviado',
+  RECHAZADO: 'Rechazado',
+};
+
+/** Confirmación de «Descartar» (criterio 17). */
+export const MENSAJE_CONFIRMAR_DESCARTE = '¿Descartar este registro? No se enviará y no se podrá recuperar.';
+
+/** «Pendientes de envío» sin registros (estado vacío; texto de la app, falta en el catálogo). */
+export const MENSAJE_SIN_PENDIENTES = 'No hay registros pendientes de envío.';
 
 /** Cerrar sesión con pendientes (criterio 18). */
 export function mensajePendientesAlCerrar(n: number): string {
