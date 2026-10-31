@@ -86,6 +86,14 @@ export function formatearFechaHora(instante: string | Date): string {
   return `${fechaDe(laPaz)} ${dosDigitos(laPaz.getUTCHours())}:${dosDigitos(laPaz.getUTCMinutes())}`;
 }
 
+/** `15/11 14:30` en hora de La Paz (día y mes, sin el año). */
+export function formatearDiaHora(instante: string | Date): string {
+  const laPaz = enLaPaz(instante);
+  return `${dosDigitos(laPaz.getUTCDate())}/${dosDigitos(laPaz.getUTCMonth() + 1)} ${dosDigitos(
+    laPaz.getUTCHours(),
+  )}:${dosDigitos(laPaz.getUTCMinutes())}`;
+}
+
 /** Periodo `AAAA-MM`: el mes del instante en La Paz (como lo calcula Materiales, diseño 004). */
 export function periodoLaPaz(instante: string | Date): string {
   const laPaz = enLaPaz(instante);

@@ -1,10 +1,20 @@
 // Textos de la app sin señal (101; docs/mensajes.md de la carpeta general, «App sin señal»).
 import { mensajeDeFallo, mensajePeriodoCerrado } from '../api/errores';
-import { formatearCantidadMaterial, periodoLaPaz } from '../nucleo/formato';
+import { formatearCantidadMaterial, formatearDiaHora, periodoLaPaz } from '../nucleo/formato';
 import type { Operacion } from './cola';
 
 /** Primer uso sin señal: nunca se descargó el paquete (criterio 4). */
 export const MENSAJE_PRIMERA_VEZ_SIN_SENAL = 'Necesitas señal la primera vez para descargar tus obras';
+
+/** Sin conexión: se trabaja con el paquete guardado (criterio 3), «Sin señal · datos del 15/11 14:30». */
+export function mensajeSinSenal(descargadoEn: string): string {
+  return `Sin señal · datos del ${formatearDiaHora(descargadoEn)}`;
+}
+
+/** El stock incluye movimientos de la cola (criterio 9). */
+export function mensajeIncluyeSinEnviar(n: number): string {
+  return `Incluye ${n} ${n === 1 ? 'movimiento' : 'movimientos'} sin enviar`;
+}
 
 /** El servidor no confirmó el registro en 5 s (criterio 8). */
 export const MENSAJE_GUARDADO_EN_CELULAR = 'Guardado en el celular · se enviará cuando haya señal';

@@ -3,11 +3,14 @@ import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-li
 import { ImageManipulator } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
+import NetInfo from '@react-native-community/netinfo';
+
 import { jsonRespuesta, simularFetch } from './pruebas/fetch-simulado';
 import { tokenDeUsuario } from './pruebas/jwt';
 import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './sesion/keycloak';
 import { RenovacionRechazada } from './sesion/renovacion';
 import { guardarTokens, leerTokens } from './sesion/tokens';
+import type { PaqueteDatos } from './api/sincronizacion';
 import { agregar, listar } from './sync/cola';
 import { guardarPaquete, leerPaquete } from './sync/paquete';
 
@@ -40,11 +43,19 @@ const DETALLE = {
   ],
 };
 
+/** Paquete de datos de Sincronización (101) con esas obras y materiales. */
+const paqueteDe = (
+  obrasDelPaquete: unknown[],
+  materiales: unknown[] = [],
+  versionDatos = 'v1',
+) => ({ versionDatos, generadoEn: '2026-11-15T13:00:00Z', obras: obrasDelPaquete, materiales });
+const OBRA_PAQUETE = { ...DETALLE, stock: [] };
+
 beforeEach(() => {
   jest.clearAllMocks();
   iniciarMock.mockResolvedValue(null);
   jest.spyOn(console, 'warn').mockImplementation(() => {});
-  obras = { 'GET /obras': () => jsonRespuesta(200, []) };
+  obras = { 'GET /paquete-datos': () => jsonRespuesta(200, paqueteDe([])) };
   fetchMock = simularFetch();
   fetchMock.mockImplementation(async (url: string, init: RequestInit = {}) => {
     // Obras (8081), Materiales (8082) y Sincronización (8084) no comparten rutas: la clave es la ruta
@@ -217,7 +228,7 @@ describe('cerrar sesión con registros sin enviar (101, criterio 18)', () => {
 
 describe('foto de avance (005)', () => {
   beforeEach(() => {
-    obras['GET /obras'] = () => jsonRespuesta(200, [OBRA]);
+    obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([OBRA_PAQUETE]));
     obras['GET /obras/o1'] = () => jsonRespuesta(200, DETALLE);
   });
 
@@ -231,7 +242,10 @@ describe('foto de avance (005)', () => {
 
   it('la pestaña Foto de avance lista sus obras y lleva a la pantalla de la obra', async () => {
     await entrarCon(['maestro']);
-    await fireEvent.press(await screen.findByText('Foto de avance'));
+    await screen.findByText('Edificio Las Palmas');
+    // «Foto de avance» es la pestaña y también el botón de la obra en «Mis obras»: la pestaña va al final.
+    const textos = screen.getAllByText('Foto de avance');
+    await fireEvent.press(textos[textos.length - 1]);
     expect(await screen.findByText('Elige la obra')).toBeTruthy();
     await fireEvent.press(screen.getByLabelText('Edificio Las Palmas'));
     expect(await screen.findByText('P-02 · Muro de ladrillo')).toBeTruthy();
@@ -246,13 +260,15 @@ describe('foto de avance (005)', () => {
     expect(screen.queryByText('Foto de avance')).toBeNull();
   });
 
-  it('si Obras no responde, «Mis obras» muestra el error con «Reintentar»', async () => {
-    obras['GET /obras'] = () => jsonRespuesta(404, { codigo: 'RUTA_NO_ENCONTRADA' });
+  it('si la primera descarga de las obras falla, «Mis obras» pide señal con «Reintentar» (101, criterio 4)', async () => {
+    obras['GET /paquete-datos'] = () =>
+      jsonRespuesta(503, { codigo: 'SERVICIO_NO_DISPONIBLE' }, 'application/problem+json');
     await entrarCon(['maestro']);
-    expect(
-      await screen.findByText('No encontramos lo que buscas. Puede que ya no exista o que no tengas acceso.'),
-    ).toBeTruthy();
-    expect(screen.getByRole('button', { name: /Reintentar/ })).toBeTruthy();
+    expect(await screen.findByText('Necesitas señal la primera vez para descargar tus obras')).toBeTruthy();
+
+    obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([OBRA_PAQUETE]));
+    await fireEvent.press(screen.getByRole('button', { name: /Reintentar/ }));
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
   });
 
   it('elige la partida, toma la foto comprimida y la ve antes de enviar (criterios 1 y 2)', async () => {
@@ -292,7 +308,7 @@ describe('foto de avance (005)', () => {
 
 describe('obras del almacenero (004, criterio 1)', () => {
   beforeEach(() => {
-    obras['GET /obras'] = () => jsonRespuesta(200, [OBRA]);
+    obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([OBRA_PAQUETE]));
     obras['GET /obras/o1'] = () => jsonRespuesta(200, DETALLE);
   });
 
@@ -646,14 +662,12 @@ describe('ingreso y salida de material (004, con la cola de la 101)', () => {
   });
 });
 
-describe('stock de la obra (004, criterio 9)', () => {
-  const fila = (codigo: string, nombre: string, cantidad: number, minimo: number, estado: string) => ({
-    materialId: codigo, codigo, nombre, unidad: 'bolsa', unidadPlural: 'bolsas', cantidad, minimo, estado,
-  });
-
-  beforeEach(() => {
-    obras['GET /obras/o1'] = () => jsonRespuesta(200, DETALLE);
-  });
+describe('stock de la obra (004, criterio 9; desde la 101, del paquete local)', () => {
+  const material = (codigo: string, nombre: string) => ({ id: codigo, codigo, nombre, unidad: 'bolsa', unidadPlural: 'bolsas' });
+  const MATERIALES = [material('CEM-IP30', 'Cemento IP-30'), material('ARE-01', 'Arena fina'), material('LAD-6H', 'Ladrillo 6 huecos')];
+  const fila = (materialId: string, cantidad: number, minimo: number, estado: string) => ({ materialId, cantidad, minimo, estado });
+  const conStock = (stock: unknown[]) => () =>
+    jsonRespuesta(200, paqueteDe([{ ...DETALLE, stock }], MATERIALES));
 
   const abrirStock = async () => {
     await guardarTokens(sesionDe(['almacenero']));
@@ -661,12 +675,11 @@ describe('stock de la obra (004, criterio 9)', () => {
   };
 
   it('lista cada material con cantidad, mínimo y estado con los colores del ERP', async () => {
-    obras['GET /obras/o1/stock'] = () =>
-      jsonRespuesta(200, [
-        fila('ARE-01', 'Arena fina', 40, 100, 'BAJO'),
-        fila('CEM-IP30', 'Cemento IP-30', 120, 100, 'JUSTO'),
-        fila('LAD-6H', 'Ladrillo 6 huecos', 1, 0, 'OK'),
-      ]);
+    obras['GET /paquete-datos'] = conStock([
+      fila('CEM-IP30', 120, 100, 'JUSTO'),
+      fila('ARE-01', 40, 100, 'BAJO'),
+      fila('LAD-6H', 1, 0, 'OK'),
+    ]);
     await abrirStock();
     expect(await screen.findByText('ARE-01 · Arena fina')).toBeTruthy();
     expect(screen.getByText('Cantidad: 40 bolsas')).toBeTruthy();
@@ -677,21 +690,51 @@ describe('stock de la obra (004, criterio 9)', () => {
     expect(screen.getByTestId('chip-atencion')).toHaveTextContent('Justo');
     expect(screen.getByTestId('chip-exito')).toHaveTextContent('OK');
     expect(screen.getByText('Edificio Las Palmas')).toBeTruthy();
+    expect(screen.queryByTestId('stock-sin-enviar')).toBeNull();
   });
 
   it('sin filas muestra el estado vacío', async () => {
-    obras['GET /obras/o1/stock'] = () => jsonRespuesta(200, []);
+    obras['GET /paquete-datos'] = conStock([]);
     await abrirStock();
     expect(
       await screen.findByText('Esta obra todavía no tiene materiales con movimientos ni mínimo definido.'),
     ).toBeTruthy();
   });
 
-  it('si Materiales no ve la obra, «Obra no encontrada» con «Reintentar»', async () => {
-    obras['GET /obras/o1/stock'] = () =>
-      jsonRespuesta(404, { codigo: 'OBRA_NO_ENCONTRADA' }, 'application/problem+json');
+  it('una obra que no está en los datos descargados: «Obra no encontrada» con «Reintentar»', async () => {
+    obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([], MATERIALES));
     await abrirStock();
     expect(await screen.findByText('Obra no encontrada')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Reintentar/ })).toBeTruthy();
+  });
+
+  it('suma los movimientos sin enviar y lo dice; sin señal muestra la fecha de los datos (101, criterios 3 y 9)', async () => {
+    obras = {}; // sin señal: no responde nada
+    jest.mocked(NetInfo.addEventListener).mockImplementationOnce((oyente) => {
+      (oyente as (estado: unknown) => void)({ isConnected: false, isInternetReachable: false });
+      return jest.fn();
+    });
+    await guardarPaquete(
+      'id-usuario1',
+      paqueteDe([{ ...DETALLE, stock: [fila('CEM-IP30', 120, 100, 'JUSTO')] }], MATERIALES) as PaqueteDatos,
+      '2026-11-15T18:30:00.000Z',
+    );
+    const salida = (id: string, cantidad: number) => ({
+      idOperacion: id,
+      usuarioId: 'id-usuario1',
+      usuarioNombre: 'Juan Pérez',
+      tipo: 'MOVIMIENTO_MATERIAL' as const,
+      obraId: 'o1',
+      datos: { id, obraId: 'o1', materialId: 'CEM-IP30', tipo: 'SALIDA', cantidad, partidaId: 'p1' },
+      descripcion: 'Salida',
+    });
+    await agregar(salida('s1', 15));
+    await agregar(salida('s2', 10));
+
+    await abrirStock();
+    expect(await screen.findByText('Cantidad: 95 bolsas', {}, { timeout: 5000 })).toBeTruthy();
+    expect(screen.getByText('Incluye 2 movimientos sin enviar')).toBeTruthy();
+    expect(screen.getByTestId('chip-error')).toHaveTextContent('Bajo');
+    expect(screen.getByText('Sin señal · datos del 15/11 14:30')).toBeTruthy();
   });
 });

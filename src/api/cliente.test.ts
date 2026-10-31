@@ -6,7 +6,7 @@ import {
   urlServicio,
 } from './cliente';
 import { ErrorApi, esReintentable, mensajeDeFallo, type FalloApi } from './errores';
-import { listarObras, obtenerObra, registrarFoto } from './obras';
+import { obtenerObra, registrarFoto } from './obras';
 import { jsonRespuesta, simularFetch } from '../pruebas/fetch-simulado';
 
 const token = () => Promise.resolve('token-1');
@@ -143,26 +143,21 @@ describe('mensajes (docs/mensajes.md)', () => {
 });
 
 describe('Obras', () => {
-  it('GET /obras y GET /obras/{id} contra obrasUrl de app.json', async () => {
+  it('GET /obras/{id} contra obrasUrl de app.json', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonRespuesta(200, [{ id: 'o1', nombre: 'Edificio', ubicacion: 'SCZ', estado: 'EN_EJECUCION' }]))
       .mockResolvedValueOnce(
         jsonRespuesta(200, {
           id: 'o1', nombre: 'Edificio', ubicacion: 'SCZ', estado: 'EN_EJECUCION',
           partidas: [{ id: 'p1', codigo: 'P-01', nombre: 'Losa', unidad: 'm2' }],
         }),
       );
-    await expect(listarObras(token)).resolves.toHaveLength(1);
     await expect(obtenerObra('o1', token)).resolves.toMatchObject({ partidas: [{ codigo: 'P-01' }] });
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      'http://localhost:8081/obras',
-      'http://localhost:8081/obras/o1',
-    ]);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['http://localhost:8081/obras/o1']);
   });
 
   it('una respuesta fuera del contrato es respuesta-invalida', async () => {
-    fetchMock.mockResolvedValue(jsonRespuesta(200, [{ id: 1 }]));
-    await expect(falloDe(listarObras(token))).resolves.toEqual({ tipo: 'respuesta-invalida' });
+    fetchMock.mockResolvedValue(jsonRespuesta(200, { id: 1 }));
+    await expect(falloDe(obtenerObra('o1', token))).resolves.toEqual({ tipo: 'respuesta-invalida' });
   });
 
   it('registrarFoto: 201 es nueva y 200 es repetida (criterio 4)', async () => {

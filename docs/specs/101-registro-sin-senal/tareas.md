@@ -13,7 +13,7 @@ Marca cada tarea al terminarla (con sus pruebas y su commit).
 - [x] Disparadores del envío: al agregar, NetInfo conectado, `AppState` activo, cada 60 s con pendientes, «Enviar ahora»
 - [x] Sesión sin señal con `usuarioLocal`; cierre de sesión con aviso de pendientes y borrado del paquete
 - [x] Formularios de ingreso y salida (004) pasan por la cola; mensajes «Registrado» / «Guardado en el celular» / rechazo
-- [ ] Lista de obras y stock desde el paquete local, con pendientes sumados y aviso «Sin señal · datos del …»
+- [x] Lista de obras y stock desde el paquete local, con pendientes sumados y aviso «Sin señal · datos del …»
 - [ ] Pantalla «Pendientes de envío» con contador en el menú, estados, «Enviar ahora», «Descartar» y «Actualizar datos»
 - [ ] Pruebas de la spec (cola, espera creciente, enviador con `fetch` simulado, stock local)
 - [ ] Puntos de la evaluación (30/10/2026): sesión larga con `scope=openid offline_access` y revocación al cerrar sesión; «Registrar con fecha de hoy» en un movimiento rechazado por `PERIODO_CERRADO` (UUID nuevo, fecha actual, descarta el rechazado); aviso de pendientes de otro usuario con su nombre (`usuario_nombre`)

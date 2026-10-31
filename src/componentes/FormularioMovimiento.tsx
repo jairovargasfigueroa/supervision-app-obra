@@ -7,7 +7,7 @@ import { primerError, useMovimiento } from '../formularios/useMovimiento';
 import { presentacionEstadoStock } from '../nucleo/estado-stock';
 import { formatearCantidadMaterial } from '../nucleo/formato';
 import { radios, TAMANO_TACTIL_MINIMO, useTema } from '../tema';
-import { TituloObra } from './ConObra';
+import { TituloObra } from './TituloObra';
 import { EstadoChip } from './EstadoChip';
 import { EstadoVacio } from './EstadoVacio';
 import { SelectorMaterial } from './SelectorMaterial';

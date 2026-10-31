@@ -1,4 +1,10 @@
-import { descripcionMovimiento, mensajePendientesAlCerrar, mensajeRechazo } from './mensajes';
+import {
+  descripcionMovimiento,
+  mensajeIncluyeSinEnviar,
+  mensajePendientesAlCerrar,
+  mensajeRechazo,
+  mensajeSinSenal,
+} from './mensajes';
 
 const cemento = { nombre: 'Cemento IP-30', unidad: 'bolsa', unidadPlural: 'bolsas' };
 
@@ -27,6 +33,12 @@ describe('textos de la 101', () => {
     expect(mensajeRechazo({ errorCodigo: 'CODIGO_NUEVO', respuesta: { status: 422 }, datos: {} })).toBe(
       'No se pudo completar la operación porque no cumple una regla del sistema.',
     );
+  });
+
+  it('sin señal con la fecha de los datos en La Paz, y los movimientos sin enviar (criterios 3 y 9)', () => {
+    expect(mensajeSinSenal('2026-11-15T18:30:00.000Z')).toBe('Sin señal · datos del 15/11 14:30');
+    expect(mensajeIncluyeSinEnviar(3)).toBe('Incluye 3 movimientos sin enviar');
+    expect(mensajeIncluyeSinEnviar(1)).toBe('Incluye 1 movimiento sin enviar');
   });
 
   it('aviso al cerrar sesión con pendientes (criterio 18)', () => {
