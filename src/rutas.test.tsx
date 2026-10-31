@@ -882,3 +882,36 @@ describe('pendientes de envío (101, criterios 16 y 17)', () => {
     expect(screen.queryByLabelText(/^Pendientes: /)).toBeNull();
   });
 });
+
+describe('diario de obra (103)', () => {
+  const hoy = () => new Date(Date.now() - 4 * 3_600_000).toISOString().slice(0, 10); // hoy en La Paz
+  const conDiario = (diario: unknown[]) => () =>
+    jsonRespuesta(200, paqueteDe([{ ...OBRA_PAQUETE, diario }]));
+
+  it('el maestro entra desde «Mis obras» y ve las entradas del servidor y las sin enviar (criterio 7)', async () => {
+    obras['GET /paquete-datos'] = conDiario([
+      { id: 'd1', fecha: hoy(), clima: 'SOLEADO', texto: 'Se vació la losa del 2do piso.' },
+    ]);
+    await agregar({
+      idOperacion: 'd2',
+      usuarioId: 'id-usuario1',
+      usuarioNombre: 'Juan Pérez',
+      tipo: 'ENTRADA_DIARIO',
+      obraId: 'o1',
+      datos: { id: 'd2', obraId: 'o1', fecha: '2026-01-02', clima: 'LLUVIA_LEVE', texto: 'Vieja: fuera de los 30 días.' },
+      descripcion: 'Diario',
+    });
+    await entrarCon(['maestro']);
+    await fireEvent.press(await screen.findByLabelText('Diario de obra: Edificio Las Palmas'));
+    expect(await screen.findByText('Se vació la losa del 2do piso.')).toBeTruthy();
+    expect(screen).toHavePathname('/obras/o1/diario');
+    expect(screen.queryByText('Vieja: fuera de los 30 días.')).toBeNull();
+  });
+
+  it('el almacenero no llega al diario', async () => {
+    await guardarTokens(sesionDe(['almacenero']));
+    await renderRouter('src/app', { initialUrl: '/obras/o1/diario' });
+    await screen.findAllByText('Stock');
+    expect(screen).not.toHavePathname('/obras/o1/diario');
+  });
+});

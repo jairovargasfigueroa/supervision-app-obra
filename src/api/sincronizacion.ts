@@ -4,6 +4,7 @@
 import { z } from 'zod';
 
 import { pedir, urlServicio, validar, type ObtenerToken } from './cliente';
+import { CLIMAS } from '../nucleo/clima';
 import { ESTADOS_STOCK } from './materiales';
 
 const esquemaPartidaPaquete = z.looseObject({
@@ -20,12 +21,22 @@ const esquemaStockPaquete = z.looseObject({
   estado: z.enum(ESTADOS_STOCK),
 });
 
+const esquemaEntradaDiarioPaquete = z.looseObject({
+  id: z.string(),
+  /** `AAAA-MM-DD` (día en La Paz). */
+  fecha: z.string(),
+  clima: z.enum(CLIMAS),
+  texto: z.string(),
+});
+
 const esquemaObraPaquete = z.looseObject({
   id: z.string(),
   nombre: z.string(),
   ubicacion: z.string(),
   partidas: z.array(esquemaPartidaPaquete),
   stock: z.array(esquemaStockPaquete),
+  /** 103: solo en el paquete del maestro, las entradas de los últimos 30 días. */
+  diario: z.array(esquemaEntradaDiarioPaquete).optional(),
 });
 
 const esquemaMaterialPaquete = z.looseObject({
@@ -47,6 +58,7 @@ export type PaqueteDatos = z.infer<typeof esquemaPaqueteDatos>;
 export type ObraPaquete = z.infer<typeof esquemaObraPaquete>;
 export type StockPaquete = z.infer<typeof esquemaStockPaquete>;
 export type MaterialPaquete = z.infer<typeof esquemaMaterialPaquete>;
+export type EntradaDiarioPaquete = z.infer<typeof esquemaEntradaDiarioPaquete>;
 
 const url = (ruta: string) => urlServicio('sincronizacion', ruta);
 

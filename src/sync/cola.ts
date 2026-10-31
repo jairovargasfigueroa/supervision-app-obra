@@ -6,8 +6,8 @@ import { baseLocal } from './base-local';
 
 export type EstadoOperacion = 'PENDIENTE' | 'ENVIANDO' | 'ENVIADO' | 'RECHAZADO';
 
-/** Tipos de operación de Sincronización que registra la app (101, 102). */
-export type TipoOperacion = 'MOVIMIENTO_MATERIAL' | 'FOTO_AVANCE';
+/** Tipos de operación de Sincronización que registra la app (101, 102, 103). */
+export type TipoOperacion = 'MOVIMIENTO_MATERIAL' | 'FOTO_AVANCE' | 'ENTRADA_DIARIO';
 
 /**
  * Archivo de la operación (102): `NINGUNO` (sin archivo), `PENDIENTE` (falta subirlo), `SUBIENDO` o

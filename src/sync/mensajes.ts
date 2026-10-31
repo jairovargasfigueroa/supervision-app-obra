@@ -2,6 +2,7 @@
 import { mensajeDeFallo, mensajePeriodoCerrado } from '../api/errores';
 import { formatearCantidadMaterial, formatearDiaHora, periodoLaPaz } from '../nucleo/formato';
 import type { EstadoOperacion, Operacion } from './cola';
+import type { EstadoEntrada } from './diario-local';
 
 /** Primer uso sin señal: nunca se descargó el paquete (criterio 4). */
 export const MENSAJE_PRIMERA_VEZ_SIN_SENAL = 'Necesitas señal la primera vez para descargar tus obras';
@@ -25,6 +26,13 @@ export const ETIQUETA_ESTADO: Record<EstadoOperacion, string> = {
   ENVIANDO: 'Enviando',
   ENVIADO: 'Enviado',
   RECHAZADO: 'Rechazado',
+};
+
+/** Marca de una entrada del diario en su pantalla (103, criterio 7); las enviadas no llevan marca. */
+export const ETIQUETA_ENTRADA: Record<EstadoEntrada, string | null> = {
+  ENVIADA: null,
+  SIN_ENVIAR: 'Sin enviar',
+  RECHAZADA: 'Rechazada',
 };
 
 /** Confirmación de «Descartar» (criterio 17). */

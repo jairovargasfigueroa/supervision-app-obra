@@ -1,6 +1,9 @@
 import {
   formatearCantidad,
+  fechaLaPaz,
   formatearCantidadMaterial,
+  formatearDiaMes,
+  restarDias,
   formatearFecha,
   formatearFechaHora,
   formatearMonto,
@@ -67,5 +70,15 @@ describe('formato', () => {
   it('rechaza valores no válidos', () => {
     expect(() => formatearMonto(Number.NaN)).toThrow(RangeError);
     expect(() => formatearFechaHora('no es fecha')).toThrow(RangeError);
+  });
+});
+
+describe('fechas del diario (103)', () => {
+  it('el día en La Paz, días hacia atrás y dd/mm', () => {
+    expect(fechaLaPaz('2026-11-16T03:30:00Z')).toBe('2026-11-15');
+    expect(fechaLaPaz('2026-11-16T04:00:00Z')).toBe('2026-11-16');
+    expect(restarDias('2026-03-01', 1)).toBe('2026-02-28');
+    expect(restarDias('2026-01-03', 7)).toBe('2025-12-27');
+    expect(formatearDiaMes('2026-11-05')).toBe('05/11');
   });
 });

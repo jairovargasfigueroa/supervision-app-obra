@@ -79,6 +79,14 @@ export const PANTALLAS_OBRA = [
     roles: ['maestro'],
   },
   {
+    // 103: diario de obra del maestro (clima y lo que pasó en el día).
+    ruta: 'obras/[id]/diario',
+    titulo: 'Diario de obra',
+    accion: 'Diario de obra',
+    icono: 'notebook-outline',
+    roles: ['maestro'],
+  },
+  {
     ruta: 'obras/[id]/ingreso',
     titulo: 'Ingreso de material',
     accion: 'Ingreso',

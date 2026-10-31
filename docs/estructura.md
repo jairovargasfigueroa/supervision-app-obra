@@ -36,6 +36,7 @@ src/
     (app)/(pestanas)/stock.tsx       # pestaña Stock (almacenero)
     (app)/(pestanas)/pendientes.tsx  # pestaña Pendientes con contador (maestro y almacenero, 101)
     (app)/obras/[id]/foto.tsx        # maestro (005)
+    (app)/obras/[id]/diario.tsx      # maestro (103)
     (app)/obras/[id]/ingreso.tsx     # almacenero
     (app)/obras/[id]/salida.tsx      # almacenero
     (app)/obras/[id]/stock.tsx       # almacenero
@@ -56,7 +57,7 @@ src/
                    useFotoAvance.ts (estado de la pantalla; desde la 102 guarda la foto y la pone en la cola)
   componentes/     BarraSuperior.tsx, EncabezadoApp.tsx (barra con sesión: «Cerrar sesión» con aviso de pendientes, 101), PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
                    ObrasAsignadas.tsx (obras del paquete local, con «Sin señal · datos del …»), TituloObra.tsx,
-                   AvisoSinSenal.tsx (101), PendientesEnvio.tsx (pantalla «Pendientes de envío», 101), ConObraLocal.tsx (la obra del paquete guardado, 101), FormularioMovimiento.tsx
+                   AvisoSinSenal.tsx (101), PendientesEnvio.tsx (pantalla «Pendientes de envío», 101), DiarioObra.tsx (103), ConObraLocal.tsx (la obra del paquete guardado, 101), FormularioMovimiento.tsx
                    (ingreso y salida), StockObra.tsx,
                    SelectorMaterial.tsx (con búsqueda), SelectorPartida.tsx
   sync/            (capa 1, 101) dispositivo.ts (idDispositivo: UUID creado una vez y guardado en secure-store),
@@ -69,13 +70,14 @@ src/
                    ENVIADO / RECHAZADO / reintento; al abrir la app ENVIANDO → PENDIENTE y se borran los
                    ENVIADO de hace más de 24 h), archivos.ts (102: foto en documentDirectory/pendientes/,
                    abrir y borrar), subidor.ts (102: un archivo a la vez, URL nueva y PUT completo a S3),
-                   espera.ts (espera creciente), enviador.ts (envío por lotes con candado, espera creciente),
+                   espera.ts (espera creciente), diario-local.ts (103: entradas del paquete + cola, días
+                   elegibles, una por día), enviador.ts (envío por lotes con candado, espera creciente),
                    red.ts (NetInfo: conexión = isConnected y internet no inalcanzable), disparadores.ts (al
                    volver la señal, al volver a primer plano, cada 60 s con pendientes), sincronizacion.tsx
                    (SincronizacionProvider y useSincronizacion: contador, red, «Enviar ahora», «Actualizar datos»,
                    registrar; usePaquete y useOperaciones), stock-local.ts (stock del paquete + movimientos sin
                    enviar, estado con la regla de reglas-negocio.md), mensajes.ts (textos de la 101)
-  nucleo/          formato.ts, uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
+  nucleo/          formato.ts, clima.ts (103), uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
                    estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
                    sqlite-simulado.ts (expo-sqlite sobre node:sqlite en memoria), archivos-simulados.ts
@@ -147,3 +149,9 @@ src/
 - Pendientes de otro usuario (criterio 15): `pendientesDeOtros` cuenta por usuario los `PENDIENTE` y `ENVIANDO` de otros `usuario_id` del celular; «Pendientes de envío» muestra «Hay N registros de {usuario_nombre} sin enviar; se enviarán cuando esa persona vuelva a iniciar sesión». No se envían ni se listan.
 - `sync/sincronizacion.tsx` (`SincronizacionProvider`, montado en `(app)/_layout.tsx` con `key` del usuario): la primera vez prepara la cola (`ENVIANDO` → `PENDIENTE`, borra los `ENVIADO` de más de 24 h) y envía (al abrir la app o iniciar sesión); `registrar` agrega a la cola con el `id` y el `nombre` del usuario y dispara el envío sin esperarlo; el contador (`PENDIENTE` + `ENVIANDO`) se recalcula con cada cambio de la cola (`alCambiarCola`). Los disparadores (`disparadores.ts`): NetInfo de sin señal a con señal (el primer aviso, el estado al abrir, no cuenta), `AppState` → `active`, y cada 60 s si hay pendientes y no se sabe que falte la señal; respetan la espera creciente. «Enviar ahora» (`enviarAhora`) deja listos ya todos los `PENDIENTE` del usuario (sin esperar su próximo intento; decisión de implementación: es un pedido explícito del usuario) y envía.
 - Fallo del lote completo (red, tiempo agotado, `5xx`, `429`…): todas vuelven a `PENDIENTE` con espera creciente y el envío se detiene. Decisiones de implementación (el diseño no las detalla): un `401` del lote renueva el token y lo reenvía una sola vez de inmediato (otro `401` va con espera creciente); `400 LOTE_INVALIDO` y `413` dejan las operaciones del lote `RECHAZADO` con ese código, porque reenviar el mismo lote daría lo mismo.
+
+## Diario de obra (103)
+
+- Se llega a `obras/[id]/diario` (solo `maestro`, `PANTALLAS_OBRA`) con el botón «Diario de obra» de cada obra en «Mis obras». La obra sale del paquete con `ConObraLocal`.
+- Lista (criterio 7, `sync/diario-local.ts`, `entradasDeObra`): las entradas de `diario` del paquete de esa obra (Sincronización lo trae solo para el `maestro`, últimos 30 días) más las operaciones `ENTRADA_DIARIO` de la cola de esa obra: `PENDIENTE` y `ENVIANDO` marcadas «Sin enviar», `RECHAZADO` «Rechazada» con el motivo, y una `ENVIADO` que el paquete todavía no trae, sin marca. Solo las de los últimos 30 días contando hoy en La Paz, de la más reciente a la más antigua.
+
