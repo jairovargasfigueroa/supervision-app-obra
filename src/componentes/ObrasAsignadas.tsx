@@ -1,13 +1,16 @@
-import { useQuery } from '@tanstack/react-query';
+import { useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, Card, Text } from 'react-native-paper';
 
-import { mensajeDeError } from '../api/errores';
-import { obrasAsignadasQuery, type Obra } from '../api/obras';
-import { useSesion } from '../sesion/sesion';
+import type { ObraPaquete } from '../api/sincronizacion';
+import { MENSAJE_PRIMERA_VEZ_SIN_SENAL } from '../sync/mensajes';
+import { usePaquete } from '../sync/sincronizacion';
 import { radios, TAMANO_TACTIL_MINIMO, useTema } from '../tema';
+import { AvisoSinSenal } from './AvisoSinSenal';
 import { EstadoError } from './EstadoError';
 import { PantallaVacia } from './PantallaVacia';
+
+type Obra = ObraPaquete;
 
 type Props = {
   /** Ícono del estado vacío. */
@@ -22,50 +25,64 @@ type Props = {
 
 type Accion = { texto: string; icono: string; onPress: (obra: Obra) => void };
 
-/** Obras asignadas al usuario (`GET /obras`), con sus estados de carga, vacío y error. */
+/**
+ * Obras asignadas al usuario (en ejecución), del paquete de datos guardado en el celular (101): con
+ * señal se descarga al abrir la app y con «tirar para actualizar»; sin señal se muestra lo guardado con
+ * «Sin señal · datos del dd/mm hh:mm».
+ */
 export function ObrasAsignadas({ icono, titulo, onElegir, acciones = [] }: Props) {
-  const { obtenerToken } = useSesion();
   const { colors } = useTema();
-  const consulta = useQuery(obrasAsignadasQuery(obtenerToken));
+  const { paquete, descarga, actualizarDatos, conectado } = usePaquete();
+  const [actualizando, setActualizando] = useState(false);
 
-  if (consulta.isPending) {
+  const actualizar = () => {
+    setActualizando(true);
+    actualizarDatos()
+      .catch(() => undefined)
+      .finally(() => setActualizando(false));
+  };
+
+  if (paquete.isPending || (!paquete.data && descarga === 'descargando')) {
     return (
       <View style={estilos.centro}>
         <ActivityIndicator accessibilityLabel="Cargando obras" />
       </View>
     );
   }
-  if (consulta.isError) {
+  if (!paquete.data) {
+    // Primer uso sin señal (criterio 4), o Sincronización no respondió la primera vez.
     return (
       <View style={estilos.centro}>
-        <EstadoError
-          mensaje={mensajeDeError(consulta.error)}
-          onReintentar={() => void consulta.refetch()}
-        />
+        <EstadoError mensaje={MENSAJE_PRIMERA_VEZ_SIN_SENAL} onReintentar={actualizar} />
       </View>
     );
   }
-  if (consulta.data.length === 0) {
-    return <PantallaVacia icono={icono} />;
+  const { obras } = paquete.data.contenido;
+  const aviso = <AvisoSinSenal conectado={conectado} descargadoEn={paquete.data.descargadoEn} />;
+  if (obras.length === 0) {
+    return (
+      <View style={estilos.pantalla}>
+        {conectado ? null : <View style={estilos.lista}>{aviso}</View>}
+        <PantallaVacia icono={icono} />
+      </View>
+    );
   }
 
   return (
     <FlatList
-      data={consulta.data}
+      data={obras}
       keyExtractor={(obra) => obra.id}
       contentContainerStyle={estilos.lista}
-      refreshControl={
-        <RefreshControl
-          refreshing={consulta.isRefetching}
-          onRefresh={() => void consulta.refetch()}
-        />
-      }
+      refreshControl={<RefreshControl refreshing={actualizando} onRefresh={actualizar} />}
       ListHeaderComponent={
-        titulo ? (
-          <Text variant="titleMedium" style={{ color: colors.onSurface }}>
-            {titulo}
-          </Text>
-        ) : undefined
+        <View style={estilos.encabezado}>
+          {aviso}
+          {titulo ? (
+            <Text variant="titleMedium" style={{ color: colors.onSurface }}>
+              {titulo}
+            </Text>
+          ) : null}
+        </View>
       }
       renderItem={({ item: obra }) => (
         <Card
@@ -103,7 +120,9 @@ export function ObrasAsignadas({ icono, titulo, onElegir, acciones = [] }: Props
 }
 
 const estilos = StyleSheet.create({
+  pantalla: { flex: 1 },
   centro: { flex: 1, justifyContent: 'center', padding: 16 },
+  encabezado: { gap: 12 },
   lista: { padding: 16, gap: 12 },
   tarjeta: { borderRadius: radios.tarjeta },
   // Con varios botones (almacenero, o los dos roles) bajan de renglón en pantallas de 360 px.

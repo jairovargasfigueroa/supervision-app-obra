@@ -43,6 +43,16 @@ describe('asegurarVigencia', () => {
     expect(renovar).toHaveBeenCalledWith('r1');
   });
 
+  it('con forzar renueva aunque el token siga vigente (TOKEN_VENCIDO de Sincronización)', async () => {
+    const renovar = jest.fn().mockResolvedValue(renovados);
+    await expect(asegurarVigencia(vigentes, renovar, AHORA, true)).resolves.toEqual({
+      tipo: 'vigente',
+      tokens: renovados,
+      renovado: true,
+    });
+    expect(renovar).toHaveBeenCalledWith(vigentes.refreshToken);
+  });
+
   it('Keycloak rechaza la renovación → sesión vencida', async () => {
     const renovar = jest.fn().mockRejectedValue(new RenovacionRechazada());
     await expect(asegurarVigencia(vencidos, renovar, AHORA)).resolves.toEqual({ tipo: 'vencida' });

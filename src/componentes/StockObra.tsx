@@ -1,57 +1,85 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMemo, useState } from 'react';
 import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
-import { ActivityIndicator, Card, Text } from 'react-native-paper';
+import { Card, Text } from 'react-native-paper';
 
-import { mensajeDeError } from '../api/errores';
-import { stockQuery, type FilaStock } from '../api/materiales';
-import type { DetalleObra } from '../api/obras';
+import type { ObraPaquete, PaqueteDatos } from '../api/sincronizacion';
 import { AYUDA_ESTADOS_STOCK, MENSAJE_STOCK_VACIO, presentacionEstadoStock } from '../nucleo/estado-stock';
 import { formatearCantidadMaterial } from '../nucleo/formato';
-import { useSesion } from '../sesion/sesion';
+import { mensajeIncluyeSinEnviar } from '../sync/mensajes';
+import type { PaqueteLocal } from '../sync/paquete';
+import { useOperaciones, usePaquete } from '../sync/sincronizacion';
+import { stockConPendientes, type StockLocal } from '../sync/stock-local';
 import { radios, useTema } from '../tema';
-import { TituloObra } from './ConObra';
+import { AvisoSinSenal } from './AvisoSinSenal';
 import { EstadoChip } from './EstadoChip';
-import { EstadoError } from './EstadoError';
 import { EstadoVacio } from './EstadoVacio';
+import { TituloObra } from './TituloObra';
 
-/** Stock de la obra (004, criterio 9): cantidad, mínimo y estado de cada material, como en el ERP. */
-export function StockObra({ obra }: { obra: DetalleObra }) {
-  const { obtenerToken } = useSesion();
+type FilaVista = StockLocal & { codigo: string; nombre: string; unidad: string; unidadPlural: string };
+
+/** Las filas con los datos del material del paquete, por código (como las devuelve Materiales). */
+function filasConMaterial(filas: readonly StockLocal[], materiales: PaqueteDatos['materiales']): FilaVista[] {
+  const porId = new Map(materiales.map((m) => [m.id, m]));
+  return filas
+    .map((fila) => {
+      const material = porId.get(fila.materialId);
+      return {
+        ...fila,
+        codigo: material?.codigo ?? '',
+        nombre: material?.nombre ?? fila.materialId,
+        unidad: material?.unidad ?? '',
+        unidadPlural: material?.unidadPlural ?? '',
+      };
+    })
+    .sort((a, b) => a.codigo.localeCompare(b.codigo));
+}
+
+type Props = { obra: ObraPaquete; paquete: PaqueteLocal };
+
+/**
+ * Stock de la obra (004, criterio 9): cantidad, mínimo y estado de cada material, como en el ERP. Desde
+ * la 101 sale del paquete guardado más los movimientos sin enviar (criterio 9 de la 101), con «Incluye
+ * N movimientos sin enviar» y, sin conexión, «Sin señal · datos del dd/mm hh:mm».
+ */
+export function StockObra({ obra, paquete }: Props) {
   const { colors } = useTema();
-  const stock = useQuery(stockQuery(obra.id, obtenerToken));
+  const { actualizarDatos, conectado } = usePaquete();
+  const operaciones = useOperaciones();
+  const [actualizando, setActualizando] = useState(false);
+
+  const { filas, sinEnviar } = useMemo(() => {
+    const stock = stockConPendientes(obra, operaciones.data ?? []);
+    return { filas: filasConMaterial(stock.filas, paquete.contenido.materiales), sinEnviar: stock.sinEnviar };
+  }, [obra, operaciones.data, paquete.contenido.materiales]);
+
+  const actualizar = () => {
+    setActualizando(true);
+    actualizarDatos()
+      .catch(() => undefined)
+      .finally(() => setActualizando(false));
+  };
 
   const encabezado = (
     <View style={estilos.encabezado}>
       <TituloObra obra={obra} />
+      <AvisoSinSenal conectado={conectado} descargadoEn={paquete.descargadoEn} />
       <Text variant="bodySmall" style={{ color: colors.textoSecundario }}>
         {AYUDA_ESTADOS_STOCK}
       </Text>
+      {sinEnviar > 0 ? (
+        <Text variant="bodyMedium" style={{ color: colors.atencion }} testID="stock-sin-enviar">
+          {mensajeIncluyeSinEnviar(sinEnviar)}
+        </Text>
+      ) : null}
     </View>
   );
 
-  if (stock.isPending) {
-    return (
-      <View style={estilos.centro}>
-        <ActivityIndicator accessibilityLabel="Cargando stock" />
-      </View>
-    );
-  }
-  if (stock.isError) {
-    return (
-      <View style={estilos.centro}>
-        <EstadoError mensaje={mensajeDeError(stock.error)} onReintentar={() => void stock.refetch()} />
-      </View>
-    );
-  }
-
   return (
     <FlatList
-      data={stock.data}
+      data={filas}
       keyExtractor={(fila) => fila.materialId}
       contentContainerStyle={estilos.lista}
-      refreshControl={
-        <RefreshControl refreshing={stock.isRefetching} onRefresh={() => void stock.refetch()} />
-      }
+      refreshControl={<RefreshControl refreshing={actualizando} onRefresh={actualizar} />}
       ListHeaderComponent={encabezado}
       ListEmptyComponent={<EstadoVacio icono="package-variant-closed" mensaje={MENSAJE_STOCK_VACIO} />}
       renderItem={({ item }) => <FilaDeStock fila={item} />}
@@ -59,7 +87,7 @@ export function StockObra({ obra }: { obra: DetalleObra }) {
   );
 }
 
-function FilaDeStock({ fila }: { fila: FilaStock }) {
+function FilaDeStock({ fila }: { fila: FilaVista }) {
   const { colors } = useTema();
   const cantidad = (valor: number) => formatearCantidadMaterial(valor, fila.unidad, fila.unidadPlural);
   return (
@@ -83,9 +111,8 @@ function FilaDeStock({ fila }: { fila: FilaStock }) {
 }
 
 const estilos = StyleSheet.create({
-  centro: { flex: 1, justifyContent: 'center', padding: 16 },
   lista: { padding: 16, gap: 12 },
-  encabezado: { gap: 4 },
+  encabezado: { gap: 8 },
   tarjeta: { borderRadius: radios.tarjeta },
   contenido: { gap: 4 },
   fila: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },

@@ -1,5 +1,5 @@
 // Errores de las llamadas a los servicios y su texto para el usuario (docs/mensajes.md de la carpeta
-// general). Solo están los códigos que la app puede recibir hoy (004, 005 y genéricos); un código que no
+// general). Solo están los códigos que la app puede recibir hoy (004, 005, 101 y genéricos); un código que no
 // está aquí se muestra con el genérico de su estado HTTP.
 
 /** Qué falló en una llamada. */
@@ -60,6 +60,11 @@ export const MENSAJES = {
   MATERIAL_INACTIVO: 'El material está desactivado; no se puede usar en movimientos ni fijarle un mínimo.',
   // Sin el periodo (docs/mensajes.md, «Marcadores»); con el dato, `mensajePeriodoCerrado`.
   PERIODO_CERRADO: 'El periodo ya está cerrado',
+  // Sincronización (101): rechazos de un registro de la cola.
+  LOTE_INVALIDO: 'No se pudieron enviar los registros pendientes.',
+  TIPO_OPERACION_DESCONOCIDO: 'Este tipo de registro no se reconoce. Actualiza la app.',
+  OPERACION_INVALIDA: 'El registro está incompleto y no se pudo enviar.',
+  OPERACION_AJENA: 'Este registro lo envió otro usuario y no se puede enviar con tu sesión.',
 } as const satisfies Record<string, string>;
 
 /** Genéricos de los estados que siempre traen código propio, para un código que la app no conoce. */

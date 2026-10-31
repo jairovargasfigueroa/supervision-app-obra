@@ -9,6 +9,8 @@ const esquemaConfiguracion = z.object({
   clientId: z.string().min(1),
   obrasUrl: z.url(),
   materialesUrl: z.url(),
+  /** Sincronización (capa 1, puerto 8084): por ella pasa todo lo que registra la app. */
+  sincronizacionUrl: z.url(),
 });
 
 export type Configuracion = z.infer<typeof esquemaConfiguracion>;

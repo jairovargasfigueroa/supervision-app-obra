@@ -19,10 +19,16 @@ export function tieneAccesoApp(roles: readonly string[]): boolean {
 
 export type Pestana = {
   /** Nombre de la ruta en `src/app/(app)/(pestanas)/`. */
-  ruta: 'obras/index' | 'foto' | 'ingreso' | 'salida' | 'stock';
+  ruta: 'obras/index' | 'foto' | 'ingreso' | 'salida' | 'stock' | 'pendientes';
   titulo: string;
   /** Ícono de MaterialCommunityIcons. */
-  icono: 'office-building-outline' | 'camera-outline' | 'tray-arrow-down' | 'tray-arrow-up' | 'package-variant-closed';
+  icono:
+    | 'office-building-outline'
+    | 'camera-outline'
+    | 'tray-arrow-down'
+    | 'tray-arrow-up'
+    | 'package-variant-closed'
+    | 'cloud-upload-outline';
   roles: readonly RolApp[];
 };
 
@@ -33,11 +39,14 @@ export const PESTANAS: readonly Pestana[] = [
   { ruta: 'ingreso', titulo: 'Ingreso', icono: 'tray-arrow-down', roles: ['almacenero'] },
   { ruta: 'salida', titulo: 'Salida', icono: 'tray-arrow-up', roles: ['almacenero'] },
   { ruta: 'stock', titulo: 'Stock', icono: 'package-variant-closed', roles: ['almacenero'] },
+  // 101: registros guardados en el celular por enviar, con contador.
+  { ruta: 'pendientes', titulo: 'Pendientes', icono: 'cloud-upload-outline', roles: ['maestro', 'almacenero'] },
 ];
 
 /**
  * Pestañas del usuario: `maestro` → Mis obras, Foto de avance; `almacenero` → Mis obras, Ingreso,
- * Salida, Stock; con los dos, la unión sin repetir «Mis obras». Sin ninguno, ninguna.
+ * Salida, Stock; con los dos, la unión sin repetir «Mis obras». Los dos tienen además «Pendientes»
+ * (101). Sin ninguno, ninguna.
  */
 export function pestanasPorRol(roles: readonly string[]): Pestana[] {
   const efectivos = rolesEfectivos(roles);

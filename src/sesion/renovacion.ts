@@ -41,7 +41,8 @@ export type ResultadoVigencia =
   | { tipo: 'vencida' };
 
 /**
- * Devuelve tokens vigentes: los mismos si no vencen, o los renovados con el refresh token.
+ * Devuelve tokens vigentes: los mismos si no vencen (y no se pide `forzar`), o los renovados con el
+ * refresh token.
  * - Sin refresh token, o si Keycloak rechaza la renovación → `vencida` (vuelve al inicio de sesión).
  * - Si falla la red (Keycloak no responde) → lanza el error y la sesión se conserva: no se saca al
  *   usuario por una falla de conexión; se vuelve a intentar en el siguiente uso.
@@ -50,8 +51,9 @@ export async function asegurarVigencia(
   tokens: Tokens,
   renovar: (refreshToken: string) => Promise<Tokens>,
   ahora = ahoraEnSegundos(),
+  forzar = false,
 ): Promise<ResultadoVigencia> {
-  if (!necesitaRenovar(tokens, ahora)) {
+  if (!forzar && !necesitaRenovar(tokens, ahora)) {
     return { tipo: 'vigente', tokens, renovado: false };
   }
   if (!tokens.refreshToken) {

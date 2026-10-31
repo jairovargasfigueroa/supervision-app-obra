@@ -14,6 +14,7 @@ import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './ke
 import { asegurarVigencia, msHastaRenovar } from './renovacion';
 import { usuarioDelToken, type Usuario } from './token';
 import { borrarTokens, guardarTokens, leerTokens, type Tokens } from './tokens';
+import { borrarUsuarioLocal, guardarUsuarioLocal, leerUsuarioLocal } from './usuario-local';
 
 /** Mensajes de docs/mensajes.md. */
 export const MENSAJES_SESION = {
@@ -40,8 +41,11 @@ type ValorSesion = {
   /** Abre el inicio de sesión de Keycloak solo, una vez, al abrir la app sin sesión (criterio 1). */
   iniciarSesionAlAbrir: () => void;
   cerrarSesion: () => Promise<void>;
-  /** Token de acceso vigente (lo renueva si hace falta); `null` si la sesión terminó. */
-  obtenerToken: () => Promise<string | null>;
+  /**
+   * Token de acceso vigente (lo renueva si hace falta, o siempre con `renovar`); `null` si la sesión
+   * terminó.
+   */
+  obtenerToken: (opciones?: { renovar?: boolean }) => Promise<string | null>;
 };
 
 const ContextoSesion = createContext<ValorSesion | null>(null);
@@ -63,26 +67,31 @@ export function SesionProvider({ children }: { children: ReactNode }) {
   const tokensRef = useRef<Tokens | null>(null);
   const renovacionRef = useRef<Promise<string | null> | null>(null);
 
-  const activar = useCallback((tokens: Tokens) => {
+  // `usuario`: el guardado en el celular (101, sesión sin señal); si no, el del token. El usuario queda
+  // guardado como `usuarioLocal` para la próxima vez que se abra la app sin señal.
+  const activar = useCallback((tokens: Tokens, usuario?: Usuario) => {
     tokensRef.current = tokens;
+    const activo = usuario ?? usuarioDelToken(tokens.accessToken);
     setVenceEn(tokens.venceEn);
-    setSesion({ estado: 'activa', usuario: usuarioDelToken(tokens.accessToken) });
+    setSesion({ estado: 'activa', usuario: activo });
+    guardarUsuarioLocal(activo).catch(() => undefined);
   }, []);
 
   const terminar = useCallback(async (motivo: 'vencida' | 'cerrada') => {
     tokensRef.current = null;
     setVenceEn(null);
     await borrarTokens();
+    await borrarUsuarioLocal();
     setSesion({ estado: 'sin-sesion', motivo });
   }, []);
 
-  const obtenerToken = useCallback((): Promise<string | null> => {
+  const obtenerToken = useCallback((opciones?: { renovar?: boolean }): Promise<string | null> => {
     const tokens = tokensRef.current;
     if (!tokens) {
       return Promise.resolve(null);
     }
     // Una sola renovación a la vez, aunque varias pantallas pidan el token juntas.
-    renovacionRef.current ??= asegurarVigencia(tokens, renovarTokens)
+    renovacionRef.current ??= asegurarVigencia(tokens, renovarTokens, undefined, opciones?.renovar)
       .then(async (resultado) => {
         if (resultado.tipo === 'vencida') {
           await terminar('vencida');
@@ -119,9 +128,11 @@ export function SesionProvider({ children }: { children: ReactNode }) {
           activar(tokensRef.current);
         }
       } catch {
-        // Sin conexión: se sigue con la sesión guardada y se reintenta más tarde.
+        // Sin conexión (101, criterio 6): se entra con el último usuario guardado aunque el token haya
+        // vencido; los envíos esperan a que se renueve, que se reintenta más tarde.
+        const local = await leerUsuarioLocal().catch(() => null);
         if (vigente) {
-          activar(guardados);
+          activar(guardados, local ?? undefined);
           setReintento((n) => n + 1);
         }
       }

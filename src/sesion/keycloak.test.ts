@@ -1,7 +1,7 @@
 import * as AuthSession from 'expo-auth-session';
 
 import { crearJwt } from '../pruebas/jwt';
-import { cerrarSesionKeycloak, renovarTokens, tokensDeRespuesta } from './keycloak';
+import { ALCANCES, cerrarSesionKeycloak, renovarTokens, tokensDeRespuesta } from './keycloak';
 import { RenovacionRechazada } from './renovacion';
 
 jest.mock('expo-auth-session', () => ({
@@ -18,6 +18,7 @@ jest.mock('../nucleo/configuracion', () => ({
     clientId: 'app-obra',
     obrasUrl: 'http://localhost:8081',
     materialesUrl: 'http://localhost:8082',
+    sincronizacionUrl: 'http://localhost:8084',
   }),
 }));
 
@@ -25,6 +26,7 @@ const DESCUBRIMIENTO: AuthSession.DiscoveryDocument = {
   authorizationEndpoint: 'http://localhost:8080/realms/supervision/protocol/openid-connect/auth',
   tokenEndpoint: 'http://localhost:8080/realms/supervision/protocol/openid-connect/token',
   endSessionEndpoint: 'http://localhost:8080/realms/supervision/protocol/openid-connect/logout',
+  revocationEndpoint: 'http://localhost:8080/realms/supervision/protocol/openid-connect/revoke',
 };
 
 const refreshMock = jest.mocked(AuthSession.refreshAsync);
@@ -38,6 +40,10 @@ describe('keycloak', () => {
 
   afterEach(() => {
     globalThis.fetch = fetchOriginal;
+  });
+
+  it('pide la sesión larga «offline» de Keycloak (101, criterio 7b)', () => {
+    expect(ALCANCES).toEqual(['openid', 'profile', 'offline_access']);
   });
 
   it('calcula el vencimiento con expires_in', () => {
@@ -85,11 +91,16 @@ describe('keycloak', () => {
     await expect(renovarTokens('r1')).rejects.toThrow(TypeError);
   });
 
-  it('cierra la sesión con un POST al end_session_endpoint (client_id y refresh_token)', async () => {
+  it('cierra la sesión: revoca el refresh token offline y hace POST al end_session_endpoint (101)', async () => {
     const fetchMock = jest.fn().mockResolvedValue({ ok: true, status: 204 });
     globalThis.fetch = fetchMock as unknown as typeof fetch;
     await expect(cerrarSesionKeycloak('r1')).resolves.toBe(true);
-    expect(fetchMock).toHaveBeenCalledWith(DESCUBRIMIENTO.endSessionEndpoint, {
+    expect(fetchMock).toHaveBeenNthCalledWith(1, DESCUBRIMIENTO.revocationEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: 'client_id=app-obra&token=r1&token_type_hint=refresh_token',
+    });
+    expect(fetchMock).toHaveBeenNthCalledWith(2, DESCUBRIMIENTO.endSessionEndpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: 'client_id=app-obra&refresh_token=r1',

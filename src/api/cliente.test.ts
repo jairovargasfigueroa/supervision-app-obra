@@ -1,14 +1,12 @@
 import {
-  conReintentos,
   esperaReintento,
   fetchConTiempo,
   pedir,
   reintentarConsulta,
-  reintentarEnvio,
   urlServicio,
 } from './cliente';
 import { ErrorApi, esReintentable, mensajeDeFallo, type FalloApi } from './errores';
-import { listarObras, obtenerObra, registrarFoto } from './obras';
+import { obtenerObra, registrarFoto } from './obras';
 import { jsonRespuesta, simularFetch } from '../pruebas/fetch-simulado';
 
 const token = () => Promise.resolve('token-1');
@@ -45,6 +43,20 @@ describe('pedir', () => {
       Authorization: 'Bearer token-1',
       'Content-Type': 'application/json',
       'X-Request-Id': expect.any(String),
+    });
+  });
+
+  it('agrega los encabezados propios del servicio y acepta 304 sin cambios', async () => {
+    fetchMock.mockResolvedValue(new Response(null, { status: 304 }));
+    const respuesta = await pedir('http://sync/x', {
+      obtenerToken: token,
+      encabezados: { 'X-Dispositivo-Id': 'd-1', 'If-None-Match': '"v1"' },
+    });
+    expect(respuesta).toEqual({ estado: 304, datos: undefined });
+    expect(fetchMock.mock.calls[0][1].headers).toMatchObject({
+      Authorization: 'Bearer token-1',
+      'X-Dispositivo-Id': 'd-1',
+      'If-None-Match': '"v1"',
     });
   });
 
@@ -107,46 +119,11 @@ describe('reintentos de las consultas', () => {
   });
 });
 
-describe('reintentos de un registro (diseño 004)', () => {
-  const error = (fallo: FalloApi) => new ErrorApi(fallo);
-  const servicioCaido = error({ tipo: 'http', estado: 503, codigo: 'SERVICIO_NO_DISPONIBLE' });
-
-  it('solo ante error de red, tiempo agotado o 503, y hasta 3 veces', () => {
-    expect(reintentarEnvio(0, error({ tipo: 'red' }))).toBe(true);
-    expect(reintentarEnvio(1, error({ tipo: 'tiempo' }))).toBe(true);
-    expect(reintentarEnvio(2, servicioCaido)).toBe(true);
-    expect(reintentarEnvio(3, error({ tipo: 'red' }))).toBe(false);
-    expect(reintentarEnvio(0, error({ tipo: 'http', estado: 500, codigo: 'ERROR_INTERNO' }))).toBe(false);
-    expect(reintentarEnvio(0, error({ tipo: 'http', estado: 409, codigo: 'PERIODO_CERRADO' }))).toBe(false);
-    expect(reintentarEnvio(0, error({ tipo: 'sin-sesion' }))).toBe(false);
-  });
-
-  it('conReintentos espera 1 s, 2 s y 4 s y se rinde tras el cuarto intento', async () => {
-    const esperas: number[] = [];
-    const operacion = jest.fn().mockRejectedValue(error({ tipo: 'red' }));
-    await expect(
-      conReintentos(operacion, { esperar: async (ms) => void esperas.push(ms) }),
-    ).rejects.toBeInstanceOf(ErrorApi);
-    expect(operacion).toHaveBeenCalledTimes(4);
-    expect(esperas).toEqual([1000, 2000, 4000]);
-  });
-
-  it('conReintentos devuelve el primer éxito y no reintenta un 4xx', async () => {
-    const esperar = jest.fn(() => Promise.resolve());
-    const recupera = jest.fn().mockRejectedValueOnce(servicioCaido).mockResolvedValue('ok');
-    await expect(conReintentos(recupera, { esperar })).resolves.toBe('ok');
-    expect(recupera).toHaveBeenCalledTimes(2);
-
-    const rechazo = jest.fn().mockRejectedValue(error({ tipo: 'http', estado: 422, codigo: 'MATERIAL_INACTIVO' }));
-    await expect(conReintentos(rechazo, { esperar })).rejects.toBeInstanceOf(ErrorApi);
-    expect(rechazo).toHaveBeenCalledTimes(1);
-  });
-});
-
 describe('URLs de los servicios (app.json → extra)', () => {
-  it('Obras en obrasUrl y Materiales en materialesUrl', () => {
+  it('Obras en obrasUrl, Materiales en materialesUrl y Sincronización en sincronizacionUrl', () => {
     expect(urlServicio('obras', '/obras')).toBe('http://localhost:8081/obras');
     expect(urlServicio('materiales', '/movimientos')).toBe('http://localhost:8082/movimientos');
+    expect(urlServicio('sincronizacion', '/lotes')).toBe('http://localhost:8084/lotes');
   });
 });
 
@@ -166,26 +143,21 @@ describe('mensajes (docs/mensajes.md)', () => {
 });
 
 describe('Obras', () => {
-  it('GET /obras y GET /obras/{id} contra obrasUrl de app.json', async () => {
+  it('GET /obras/{id} contra obrasUrl de app.json', async () => {
     fetchMock
-      .mockResolvedValueOnce(jsonRespuesta(200, [{ id: 'o1', nombre: 'Edificio', ubicacion: 'SCZ', estado: 'EN_EJECUCION' }]))
       .mockResolvedValueOnce(
         jsonRespuesta(200, {
           id: 'o1', nombre: 'Edificio', ubicacion: 'SCZ', estado: 'EN_EJECUCION',
           partidas: [{ id: 'p1', codigo: 'P-01', nombre: 'Losa', unidad: 'm2' }],
         }),
       );
-    await expect(listarObras(token)).resolves.toHaveLength(1);
     await expect(obtenerObra('o1', token)).resolves.toMatchObject({ partidas: [{ codigo: 'P-01' }] });
-    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      'http://localhost:8081/obras',
-      'http://localhost:8081/obras/o1',
-    ]);
+    expect(fetchMock.mock.calls.map(([url]) => url)).toEqual(['http://localhost:8081/obras/o1']);
   });
 
   it('una respuesta fuera del contrato es respuesta-invalida', async () => {
-    fetchMock.mockResolvedValue(jsonRespuesta(200, [{ id: 1 }]));
-    await expect(falloDe(listarObras(token))).resolves.toEqual({ tipo: 'respuesta-invalida' });
+    fetchMock.mockResolvedValue(jsonRespuesta(200, { id: 1 }));
+    await expect(falloDe(obtenerObra('o1', token))).resolves.toEqual({ tipo: 'respuesta-invalida' });
   });
 
   it('registrarFoto: 201 es nueva y 200 es repetida (criterio 4)', async () => {

@@ -49,12 +49,6 @@ export type RegistroFoto = {
 const url = (ruta: string) => urlServicio('obras', ruta);
 const segmento = encodeURIComponent;
 
-/** `GET /obras`: Obras devuelve solo las asignadas al usuario. */
-export async function listarObras(obtenerToken: ObtenerToken): Promise<Obra[]> {
-  const { datos } = await pedir(url('/obras'), { obtenerToken });
-  return validar(z.array(esquemaObra), datos);
-}
-
 /** `GET /obras/{id}`: detalle con sus partidas. */
 export async function obtenerObra(id: string, obtenerToken: ObtenerToken): Promise<DetalleObra> {
   const { datos } = await pedir(url(`/obras/${segmento(id)}`), { obtenerToken });
@@ -91,9 +85,6 @@ export async function registrarFoto(
   });
   return { foto: validar(esquemaFotoRegistrada, datos), yaExistia: estado === 200 };
 }
-
-export const obrasAsignadasQuery = (obtenerToken: ObtenerToken) =>
-  queryOptions({ queryKey: ['obras'], queryFn: () => listarObras(obtenerToken) });
 
 export const obraQuery = (id: string, obtenerToken: ObtenerToken) =>
   queryOptions({ queryKey: ['obras', id], queryFn: () => obtenerObra(id, obtenerToken) });

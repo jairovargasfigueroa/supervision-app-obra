@@ -7,6 +7,7 @@ const valida = {
   clientId: 'app-obra',
   obrasUrl: 'http://localhost:8081',
   materialesUrl: 'http://localhost:8082',
+  sincronizacionUrl: 'http://localhost:8084',
 };
 
 describe('configuracion', () => {
