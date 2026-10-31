@@ -3,7 +3,7 @@ import { Button, Card, Chip, HelperText, Icon, Snackbar, Surface, Text, TextInpu
 
 import type { ObraPaquete } from '../api/sincronizacion';
 import { largoTexto, TEXTO_MAXIMO } from '../formularios/diario.esquema';
-import { useDiario } from '../formularios/useDiario';
+import { sePuedeCorregir, useDiario } from '../formularios/useDiario';
 import { primerError } from '../formularios/useMovimiento';
 import { CLIMAS, ETIQUETA_CLIMA, ICONO_CLIMA } from '../nucleo/clima';
 import { formatearDiaMes, formatearFecha } from '../nucleo/formato';
@@ -36,6 +36,20 @@ export function DiarioObra({ obra }: Props) {
   const encabezado = (
     <View style={estilos.encabezado}>
       <TituloObra obra={obra} />
+      {diario.editando ? (
+        <Surface
+          mode="flat"
+          style={[estilos.aviso, estilos.fila, { backgroundColor: colors.atencionSuave }]}
+          testID="corrigiendo-diario"
+        >
+          <Text variant="bodyMedium" style={[estilos.titulo, { color: colors.atencion }]}>
+            Corrigiendo la entrada del {formatearDiaMes(diario.editando.fecha)}
+          </Text>
+          <Button onPress={diario.cancelarCorreccion} disabled={enviando}>
+            Cancelar
+          </Button>
+        </Surface>
+      ) : null}
       <formulario.Subscribe selector={(estado) => estado.submissionAttempts > 0}>
         {(intento) => (
           <>
@@ -155,7 +169,7 @@ export function DiarioObra({ obra }: Props) {
         disabled={enviando}
         contentStyle={estilos.boton}
       >
-        Guardar entrada
+        {diario.editando ? 'Guardar corrección' : 'Guardar entrada'}
       </Button>
       <Text variant="titleMedium" style={[estilos.subtitulo, { color: colors.onSurface }]}>
         Últimos 30 días
@@ -172,7 +186,12 @@ export function DiarioObra({ obra }: Props) {
         keyboardShouldPersistTaps="handled"
         ListHeaderComponent={encabezado}
         ListEmptyComponent={<EstadoVacio icono="notebook-outline" mensaje={MENSAJE_DIARIO_VACIO} />}
-        renderItem={({ item }) => <TarjetaEntrada entrada={item} />}
+        renderItem={({ item }) => (
+          <TarjetaEntrada
+            entrada={item}
+            onCorregir={sePuedeCorregir(item) && !enviando ? () => diario.corregir(item) : undefined}
+          />
+        )}
       />
       <Snackbar visible={diario.resultado !== null} onDismiss={diario.cerrarResultado} duration={4000}>
         {diario.resultado ?? ''}
@@ -181,7 +200,7 @@ export function DiarioObra({ obra }: Props) {
   );
 }
 
-function TarjetaEntrada({ entrada }: { entrada: EntradaDiario }) {
+function TarjetaEntrada({ entrada, onCorregir }: { entrada: EntradaDiario; onCorregir?: () => void }) {
   const { colors } = useTema();
   const etiqueta = ETIQUETA_ENTRADA[entrada.estado];
   return (
@@ -205,6 +224,18 @@ function TarjetaEntrada({ entrada }: { entrada: EntradaDiario }) {
           </Text>
         ) : null}
       </Card.Content>
+      {onCorregir ? (
+        <Card.Actions>
+          <Button
+            icon="pencil-outline"
+            onPress={onCorregir}
+            accessibilityLabel={`Corregir: diario del ${formatearFecha(entrada.fecha)}`}
+            contentStyle={estilos.boton}
+          >
+            Corregir
+          </Button>
+        </Card.Actions>
+      ) : null}
     </Card>
   );
 }

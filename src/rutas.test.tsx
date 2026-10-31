@@ -964,6 +964,51 @@ describe('diario de obra (103)', () => {
     await expect(listar('id-usuario1')).resolves.toHaveLength(1);
   });
 
+  const entradaEnCola = (id: string, fecha: string, texto: string) =>
+    agregar({
+      idOperacion: id,
+      usuarioId: 'id-usuario1',
+      usuarioNombre: 'Juan Pérez',
+      tipo: 'ENTRADA_DIARIO',
+      obraId: 'o1',
+      datos: { id, obraId: 'o1', fecha, clima: 'NUBLADO', texto },
+      descripcion: 'Diario',
+    });
+
+  it('una entrada sin enviar se corrige en la misma fila, con el mismo id (criterio 5)', async () => {
+    obras['GET /paquete-datos'] = conDiario([]);
+    await entradaEnCola('d9', hoy(), 'Texto con un error.');
+    await abrirDiario();
+    await fireEvent.press(await screen.findByLabelText(/^Corregir: diario del /));
+    expect(screen.getByTestId('corrigiendo-diario')).toBeTruthy();
+    expect(screen.getByLabelText('Texto del diario').props.value).toBe('Texto con un error.');
+
+    await fireEvent.press(screen.getByLabelText('Clima: Lluvia fuerte'));
+    await fireEvent.changeText(screen.getByLabelText('Texto del diario'), 'Texto ya corregido.');
+    await fireEvent.press(screen.getByRole('button', { name: /Guardar corrección/ }));
+    expect(await screen.findByText('Guardado en el celular · se enviará cuando haya señal')).toBeTruthy();
+
+    const ops = await listar('id-usuario1');
+    expect(ops).toHaveLength(1);
+    expect(ops[0]).toMatchObject({
+      idOperacion: 'd9',
+      datos: { id: 'd9', fecha: hoy(), clima: 'LLUVIA_FUERTE', texto: 'Texto ya corregido.' },
+      descripcion: `Diario · ${hoy().slice(8, 10)}/${hoy().slice(5, 7)} · Lluvia fuerte`,
+    });
+    expect(screen.queryByTestId('corrigiendo-diario')).toBeNull();
+  });
+
+  it('una rechazada muestra el motivo por su código y no se corrige (criterio 8)', async () => {
+    obras['GET /paquete-datos'] = conDiario([]);
+    await entradaEnCola('d8', hoy(), 'Entrada que el servidor rechazó.');
+    await tomarParaEnvio('id-usuario1');
+    await marcarRechazada('d8', 'FECHA_DIARIO_INVALIDA', 'Fecha anterior al inicio.', { status: 422, codigo: 'FECHA_DIARIO_INVALIDA' });
+    await abrirDiario();
+    expect(await screen.findByText('Rechazada')).toBeTruthy();
+    expect(screen.getByTestId('motivo-rechazo-diario')).toHaveTextContent('La fecha no es válida para esta obra');
+    expect(screen.queryByLabelText(/^Corregir: /)).toBeNull();
+  });
+
   it('el almacenero no llega al diario', async () => {
     await guardarTokens(sesionDe(['almacenero']));
     await renderRouter('src/app', { initialUrl: '/obras/o1/diario' });

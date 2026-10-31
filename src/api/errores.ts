@@ -1,5 +1,5 @@
 // Errores de las llamadas a los servicios y su texto para el usuario (docs/mensajes.md de la carpeta
-// general). Solo están los códigos que la app puede recibir hoy (004, 005, 101 y genéricos); un código que no
+// general). Solo están los códigos que la app puede recibir hoy (004, 005, 101 a 103 y genéricos); un código que no
 // está aquí se muestra con el genérico de su estado HTTP.
 
 /** Qué falló en una llamada. */
@@ -65,6 +65,10 @@ export const MENSAJES = {
   TIPO_OPERACION_DESCONOCIDO: 'Este tipo de registro no se reconoce. Actualiza la app.',
   OPERACION_INVALIDA: 'El registro está incompleto y no se pudo enviar.',
   OPERACION_AJENA: 'Este registro lo envió otro usuario y no se puede enviar con tu sesión.',
+  // Diario de obra (103).
+  DIARIO_DIA_YA_REGISTRADO: 'Ya existe una entrada del diario para ese día',
+  FECHA_DIARIO_INVALIDA: 'La fecha no es válida para esta obra',
+  OBRA_NO_EN_EJECUCION: 'La obra no está en ejecución',
   // Código de la app (102): el archivo de la foto ya no está en el celular; se descarta y se toma otra.
   FOTO_NO_DISPONIBLE: 'La foto no se pudo preparar para el envío.',
 } as const satisfies Record<string, string>;

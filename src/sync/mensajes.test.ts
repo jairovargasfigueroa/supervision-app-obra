@@ -53,6 +53,13 @@ describe('textos de la 101', () => {
     expect(sePuedeRegistrarHoy({ ...rechazo, estado: 'PENDIENTE', errorCodigo: 'PERIODO_CERRADO' })).toBe(false);
   });
 
+  it('rechazos del diario por su código (103)', () => {
+    const rechazo = (codigo: string, status: number) => mensajeRechazo({ errorCodigo: codigo, respuesta: { status }, datos: {} });
+    expect(rechazo('DIARIO_DIA_YA_REGISTRADO', 409)).toBe('Ya existe una entrada del diario para ese día');
+    expect(rechazo('FECHA_DIARIO_INVALIDA', 422)).toBe('La fecha no es válida para esta obra');
+    expect(rechazo('OBRA_NO_EN_EJECUCION', 422)).toBe('La obra no está en ejecución');
+  });
+
   it('aviso al cerrar sesión con pendientes (criterio 18)', () => {
     expect(mensajePendientesAlCerrar(3)).toBe(
       'Tienes 3 registros sin enviar; se enviarán cuando vuelvas a iniciar sesión con este usuario',

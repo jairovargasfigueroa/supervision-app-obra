@@ -39,6 +39,9 @@ export function mensajeDiarioYaRegistrado(fecha: string): string {
   return `Ya registraste el diario del ${formatearDiaMes(fecha)}`;
 }
 
+/** La entrada ya empezó a enviarse mientras se corregía (103, criterio 5). */
+export const MENSAJE_DIARIO_NO_CORREGIBLE = 'Esta entrada ya se está enviando y no se puede corregir.';
+
 /** Marca de una entrada del diario en su pantalla (103, criterio 7); las enviadas no llevan marca. */
 export const ETIQUETA_ENTRADA: Record<EstadoEntrada, string | null> = {
   ENVIADA: null,

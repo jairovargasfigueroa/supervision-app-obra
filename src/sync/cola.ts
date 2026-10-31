@@ -414,3 +414,25 @@ export async function marcarArchivoParaReintento(
   );
   avisar();
 }
+
+/**
+ * Corrige una operación que todavía no salió (103, criterio 5): reemplaza `datos` y `descripcion` en la
+ * misma fila, con el mismo `id`. Solo en `PENDIENTE` (no `ENVIANDO`); devuelve `false` si ya no se puede.
+ */
+export async function corregir(
+  idOperacion: string,
+  datos: Record<string, unknown>,
+  descripcion: string,
+): Promise<boolean> {
+  const db = await baseLocal();
+  const { changes } = await db.runAsync(
+    "UPDATE operacion_pendiente SET datos = ?, descripcion = ? WHERE id_operacion = ? AND estado = 'PENDIENTE'",
+    JSON.stringify(datos),
+    descripcion,
+    idOperacion,
+  );
+  if (changes > 0) {
+    avisar();
+  }
+  return changes > 0;
+}
