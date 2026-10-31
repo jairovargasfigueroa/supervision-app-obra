@@ -65,6 +65,8 @@ export const MENSAJES = {
   TIPO_OPERACION_DESCONOCIDO: 'Este tipo de registro no se reconoce. Actualiza la app.',
   OPERACION_INVALIDA: 'El registro está incompleto y no se pudo enviar.',
   OPERACION_AJENA: 'Este registro lo envió otro usuario y no se puede enviar con tu sesión.',
+  // Código de la app (102): el archivo de la foto ya no está en el celular; se descarta y se toma otra.
+  FOTO_NO_DISPONIBLE: 'La foto no se pudo preparar para el envío.',
 } as const satisfies Record<string, string>;
 
 /** Genéricos de los estados que siempre traen código propio, para un código que la app no conoce. */

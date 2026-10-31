@@ -48,7 +48,8 @@ src/
                    1-2-4 s de las consultas), errores.ts (ErrorApi y textos de docs/mensajes.md),
                    materiales.ts (tipos y respuesta de POST /movimientos), subida.ts (PUT de la foto a S3),
                    sincronizacion.ts (101: GET /paquete-datos con X-Dispositivo-Id e If-None-Match, `null` con 304;
-                   POST /lotes con tiempo máximo de 30 s, un resultado por operación)
+                   POST /lotes con tiempo máximo de 30 s, un resultado por operación; 102: POST /fotos/url-subida
+                   con 10 s)
   formularios/     movimiento.esquema.ts (campos y cuerpo de POST /movimientos, Zod), movimiento.ts (avisos de
                    stock superado, con la respuesta o con el stock mostrado), useMovimiento.ts (TanStack Form
                    sobre el paquete local + registro en la cola, 101), foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
@@ -67,7 +68,8 @@ src/
                    PENDIENTE o RECHAZADO, tomar hasta 20 listas en orden y marcarlas ENVIANDO, marcar
                    ENVIADO / RECHAZADO / reintento; al abrir la app ENVIANDO → PENDIENTE y se borran los
                    ENVIADO de hace más de 24 h), archivos.ts (102: foto en documentDirectory/pendientes/,
-                   abrir y borrar), enviador.ts (envío por lotes con candado, espera creciente),
+                   abrir y borrar), subidor.ts (102: un archivo a la vez, URL nueva y PUT completo a S3),
+                   espera.ts (espera creciente), enviador.ts (envío por lotes con candado, espera creciente),
                    red.ts (NetInfo: conexión = isConnected y internet no inalcanzable), disparadores.ts (al
                    volver la señal, al volver a primer plano, cada 60 s con pendientes), sincronizacion.tsx
                    (SincronizacionProvider y useSincronizacion: contador, red, «Enviar ahora», «Actualizar datos»,
@@ -136,7 +138,8 @@ src/
 ## Registro sin señal (101)
 
 - `sync/enviador.ts` (`enviarPendientes`): un solo envío a la vez (candado en memoria; si llega otro pedido durante el envío, se hace otra vuelta al terminar). Por cada vuelta: token vigente (si no se puede renovar por falta de red se detiene sin tocar la cola, `sin-red`; si la sesión terminó, `sin-sesion`) → hasta 20 operaciones `PENDIENTE` listas del usuario, en orden, marcadas `ENVIANDO` → `POST /lotes` (30 s) → por resultado: `PROCESADO` → `ENVIADO` con la respuesta (en un movimiento, el `stock` de la respuesta reemplaza el del paquete local); `ERROR` → `RECHAZADO` con `codigo` (el `detail` o `title` va a `error_mensaje`, solo para soporte); `REINTENTAR` → `PENDIENTE` con un intento más y espera creciente (con `TOKEN_VENCIDO`, el token se renueva antes del siguiente lote con `obtenerToken({ renovar: true })`). Se repite mientras queden listas; si envió alguna, vuelve a pedir el paquete con `If-None-Match`.
-- Espera creciente: `min(2^(intentos−1), 300)` s por un factor aleatorio entre 0,8 y 1,2.
+- Espera creciente (`sync/espera.ts`): `min(2^(intentos−1), 300)` s por un factor aleatorio entre 0,8 y 1,2.
+- Subidor (102, `sync/subidor.ts`, `subirSiguiente`): toma la operación `PENDIENTE` más antigua del usuario con `estado_archivo` `PENDIENTE` y su próximo intento vencido, la marca `SUBIENDO`, pide a Sincronización `POST /fotos/url-subida { obraId, fotoId }` (10 s; una URL nueva en cada intento) y hace `PUT` del archivo de `pendientes/` (el `File` de expo-file-system como cuerpo, `image/jpeg`, sin token, 30 s). `PUT` correcto → `claveArchivo` en `datos` y `estado_archivo` `SUBIDO`. `4xx` al pedir la URL (salvo `401`, `408` y `429`) → `RECHAZADO` con su `codigo`. Red, tiempo agotado, `5xx`, `401` (pide renovar el token) o fallo del `PUT` → `estado_archivo` `PENDIENTE` con la espera creciente. Si el archivo ya no está en el celular → `RECHAZADO` con el código propio `FOTO_NO_DISPONIBLE` («La foto no se pudo preparar para el envío.»). Al abrir la app, un `SUBIENDO` vuelve a `PENDIENTE`.
 - Sesión sin señal: al entrar (inicio de sesión, apertura o renovación) se guarda el `usuarioLocal` en `expo-secure-store` (`sesion/usuario-local.ts`). Si al abrir la app la renovación falla por la red, se entra con los tokens guardados y el `usuarioLocal` aunque el token haya vencido; los envíos esperan a que se renueve (el enviador se detiene con `sin-red`). Si Keycloak rechaza la renovación, se borran los tokens y el `usuarioLocal` y vuelve el inicio de sesión; la cola no se toca.
 - Cerrar sesión (`EncabezadoApp`): con pendientes del usuario (`PENDIENTE` + `ENVIANDO`), primero el diálogo «¿Cerrar sesión?» con «Tienes N registros sin enviar; se enviarán cuando vuelvas a iniciar sesión con este usuario», «Cancelar» y «Cerrar sesión». Al cerrar se borra el `paquete_datos` del usuario y después tokens y `usuarioLocal` (como en la 001); las operaciones quedan en la cola con su `usuario_id`. Textos de la 101 en `sync/mensajes.ts`.
 - «Registrar con fecha de hoy» (criterio 14b): en un movimiento `RECHAZADO` con `PERIODO_CERRADO` (en «Pendientes de envío» y en el formulario tras el rechazo), `registrarConFechaDeHoy` agrega una operación nueva (UUID nuevo, mismos `datos` con ese `id` y `registradoEn` = ahora, misma descripción), descarta la rechazada y envía; el resultado se muestra como al registrar.

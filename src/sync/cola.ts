@@ -221,13 +221,17 @@ export async function descartar(idOperacion: string): Promise<boolean> {
 
 /**
  * Al abrir la app: lo que quedó `ENVIANDO` (la app se cerró a mitad de un envío) vuelve a
- * `PENDIENTE` (es seguro: Sincronización no procesa dos veces el mismo `idOperacion`), y se borran
- * los `ENVIADO` de hace más de 24 h.
+ * `PENDIENTE` (es seguro: Sincronización no procesa dos veces el mismo `idOperacion`), un archivo que
+ * quedó `SUBIENDO` vuelve a `PENDIENTE` (102), y se borran los `ENVIADO` de hace más de 24 h.
  */
 export async function prepararCola(ahora: Date = new Date()): Promise<void> {
   const db = await baseLocal();
   const limite = new Date(ahora.getTime() - HORAS_ENVIADAS * 3_600_000).toISOString();
   await db.runAsync("UPDATE operacion_pendiente SET estado = 'PENDIENTE' WHERE estado = 'ENVIANDO'");
+  // 102: una subida cortada se vuelve a hacer completa (el PUT a la misma clave es idempotente).
+  await db.runAsync(
+    "UPDATE operacion_pendiente SET estado_archivo = 'PENDIENTE' WHERE estado_archivo = 'SUBIENDO'",
+  );
   await db.runAsync(
     "DELETE FROM operacion_pendiente WHERE estado = 'ENVIADO' AND enviada_en < ?",
     limite,
@@ -310,7 +314,8 @@ export async function marcarRechazada(
   const db = await baseLocal();
   await db.runAsync(
     `UPDATE operacion_pendiente
-     SET estado = 'RECHAZADO', error_codigo = ?, error_mensaje = ?, respuesta = ?, proximo_intento_en = NULL
+     SET estado = 'RECHAZADO', error_codigo = ?, error_mensaje = ?, respuesta = ?, proximo_intento_en = NULL,
+         estado_archivo = CASE estado_archivo WHEN 'SUBIENDO' THEN 'PENDIENTE' ELSE estado_archivo END
      WHERE id_operacion = ?`,
     codigo,
     mensaje,
@@ -331,6 +336,69 @@ export async function marcarParaReintento(
   await db.runAsync(
     `UPDATE operacion_pendiente
      SET estado = 'PENDIENTE', intentos = ?, proximo_intento_en = ?, error_codigo = ?
+     WHERE id_operacion = ?`,
+    intentos,
+    proximoIntentoEn.toISOString(),
+    codigo,
+    idOperacion,
+  );
+  avisar();
+}
+
+/**
+ * Subidor (102): toma la operación `PENDIENTE` más antigua del usuario con el archivo por subir y su
+ * próximo intento vencido, y marca el archivo `SUBIENDO`. `null` si no hay.
+ */
+export async function tomarArchivoParaSubir(usuarioId: string, ahora: Date = new Date()): Promise<Operacion | null> {
+  const db = await baseLocal();
+  let tomada: Operacion | null = null;
+  await db.withTransactionAsync(async () => {
+    const fila = await db.getFirstAsync<Fila>(
+      `SELECT * FROM operacion_pendiente
+       WHERE usuario_id = ? AND estado = 'PENDIENTE' AND estado_archivo = 'PENDIENTE'
+         AND (proximo_intento_en IS NULL OR proximo_intento_en <= ?)
+       ${ORDEN} LIMIT 1`,
+      usuarioId,
+      ahora.toISOString(),
+    );
+    if (fila) {
+      await db.runAsync(
+        "UPDATE operacion_pendiente SET estado_archivo = 'SUBIENDO' WHERE id_operacion = ?",
+        fila.id_operacion,
+      );
+      tomada = { ...desdeFila(fila), estadoArchivo: 'SUBIENDO' };
+    }
+  });
+  if (tomada) {
+    avisar();
+  }
+  return tomada;
+}
+
+/** El archivo ya está en S3: se guarda la `claveArchivo` en `datos` y el registro queda listo para un lote. */
+export async function marcarArchivoSubido(idOperacion: string, datos: Record<string, unknown>): Promise<void> {
+  const db = await baseLocal();
+  await db.runAsync(
+    `UPDATE operacion_pendiente
+     SET estado_archivo = 'SUBIDO', datos = ?, proximo_intento_en = NULL, error_codigo = NULL
+     WHERE id_operacion = ?`,
+    JSON.stringify(datos),
+    idOperacion,
+  );
+  avisar();
+}
+
+/** La subida no se completó: el archivo vuelve a `PENDIENTE` con un intento más y la hora del próximo. */
+export async function marcarArchivoParaReintento(
+  idOperacion: string,
+  intentos: number,
+  proximoIntentoEn: Date,
+  codigo: string | null = null,
+): Promise<void> {
+  const db = await baseLocal();
+  await db.runAsync(
+    `UPDATE operacion_pendiente
+     SET estado_archivo = 'PENDIENTE', intentos = ?, proximo_intento_en = ?, error_codigo = ?
      WHERE id_operacion = ?`,
     intentos,
     proximoIntentoEn.toISOString(),
