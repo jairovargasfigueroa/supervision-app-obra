@@ -123,7 +123,8 @@ export function personasParaClasificar(
       alto: (c.y1 - c.y0) * alto,
       puntaje: c.puntaje,
     }))
-    .filter((p) => p.alto >= altoMinimo)
+    // Una caja pegada al borde puede quedar sin ancho al limitarla a la foto: no hay qué recortar.
+    .filter((p) => p.alto >= altoMinimo && p.ancho >= 1 && p.alto >= 1)
     .slice(0, maximo);
 }
 
@@ -136,8 +137,9 @@ export function cajaRecorte(persona: Caja, ancho: number, alto: number, margen =
   // La tolerancia evita que un error de redondeo (100 × 1,1 = 110,00000000000001) sume un píxel.
   const abajo = (v: number) => Math.floor(v + 1e-6);
   const arriba = (v: number) => Math.ceil(v - 1e-6);
-  const x0 = Math.max(abajo(persona.x - persona.ancho * margen), 0);
-  const y0 = Math.max(abajo(persona.y - persona.alto * margen), 0);
+  // El origen queda siempre dentro de la foto (un recorte fuera de la imagen hace fallar al manipulador).
+  const x0 = Math.min(Math.max(abajo(persona.x - persona.ancho * margen), 0), ancho - 1);
+  const y0 = Math.min(Math.max(abajo(persona.y - persona.alto * margen), 0), alto - 1);
   const x1 = Math.min(arriba(persona.x + persona.ancho * (1 + margen)), ancho);
   const y1 = Math.min(arriba(persona.y + persona.alto * (1 + margen)), alto);
   return { x: x0, y: y0, ancho: Math.max(x1 - x0, 1), alto: Math.max(y1 - y0, 1) };

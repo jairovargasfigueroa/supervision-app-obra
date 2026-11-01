@@ -10,17 +10,21 @@ export type EstadoEpp = { estado: 'analizando' } | EstadoAnalisis;
 
 export function useAnalisisEpp() {
   const [estado, setEstado] = useState<EstadoEpp | null>(null);
-  const actual = useRef<{ id: string; promesa: Promise<EstadoAnalisis> } | null>(null);
+  const actual = useRef<{ id: string; promesa: Promise<EstadoAnalisis>; control: AbortController } | null>(null);
 
   // Los modelos se cargan una vez al abrir la pantalla; si fallan, se reintenta al analizar.
   useEffect(() => {
     cargarModelos().catch(() => undefined);
+    // Al salir de la pantalla, el análisis en curso se cancela.
+    return () => actual.current?.control.abort();
   }, []);
 
-  /** Analiza la foto `uri` (identificada por `id`); el resultado de una foto anterior se ignora. */
+  /** Analiza la foto `uri` (identificada por `id`); el análisis de la foto anterior se cancela. */
   const analizar = useCallback((id: string, uri: string): Promise<EstadoAnalisis> => {
-    const promesa = analizarConLimite(uri);
-    actual.current = { id, promesa };
+    actual.current?.control.abort();
+    const control = new AbortController();
+    const promesa = analizarConLimite(uri, undefined, undefined, control.signal);
+    actual.current = { id, promesa, control };
     setEstado({ estado: 'analizando' });
     void promesa.then((resultado) => {
       if (actual.current?.id === id) {
@@ -37,8 +41,9 @@ export function useAnalisisEpp() {
     [],
   );
 
-  /** Olvida la foto analizada (se quitó o se descartó). */
+  /** Olvida la foto analizada (se quitó o se descartó) y cancela su análisis si sigue. */
   const limpiar = useCallback(() => {
+    actual.current?.control.abort();
     actual.current = null;
     setEstado(null);
   }, []);

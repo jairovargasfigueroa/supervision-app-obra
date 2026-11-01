@@ -6,7 +6,14 @@ import {
   simularAnalisisEpp,
   type PersonaSimulada,
 } from '../../pruebas/epp-simulado';
-import { analizarConLimite, analizarFoto, deteccionParaEnvio, type ResultadoEpp } from './analisis';
+import {
+  AnalisisCancelado,
+  analizarConLimite,
+  analizarFoto,
+  correrEnCola,
+  deteccionParaEnvio,
+  type ResultadoEpp,
+} from './analisis';
 import { cargarModelos } from './modelos';
 
 const analizarCon = (personas: PersonaSimulada[], extra: Parameters<typeof simularAnalisisEpp>[0] = {}) => {
@@ -99,6 +106,67 @@ describe('analizarFoto (con modelos simulados)', () => {
   });
 });
 
+describe('un solo análisis a la vez sobre los modelos', () => {
+  const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  it('las inferencias de dos análisis simultáneos nunca corren a la vez', async () => {
+    simularAnalisisEpp({ personas: [persona(0, 1, 1), persona(0.3, 0, 0)] });
+    const modelos = modelosSimulados();
+    let activas = 0;
+    let maximo = 0;
+    for (const modelo of [modelos.detector, modelos.clasificador]) {
+      const run = modelo.run.bind(modelo);
+      modelo.run = async (entradas) => {
+        activas++;
+        maximo = Math.max(maximo, activas);
+        await esperar(5);
+        try {
+          return await run(entradas);
+        } finally {
+          activas--;
+        }
+      };
+    }
+    const dependencias = { modelos: async () => modelos, abrir: abrirFotoSimulada };
+    const [a, b] = await Promise.all([
+      analizarFoto('file:///a.jpg', dependencias),
+      analizarFoto('file:///b.jpg', dependencias),
+    ]);
+    expect(maximo).toBe(1);
+    expect(a.personas).toBe(2);
+    expect(b.personas).toBe(2);
+  });
+
+  it('copia las salidas: el modelo puede reutilizar su buffer en la siguiente inferencia', async () => {
+    const compartido = Float32Array.from([0.1, 0.2]);
+    const modelo = { run: async () => [compartido.buffer as ArrayBuffer] };
+    const [salida] = await correrEnCola(modelo, []);
+    compartido[0] = 0.9;
+    expect(new Float32Array(salida!)[0]).toBeCloseTo(0.1);
+  });
+
+  it('un error de un modelo no traba la cola', async () => {
+    await expect(correrEnCola({ run: async () => Promise.reject(new Error('falla')) }, [])).rejects.toThrow('falla');
+    await expect(correrEnCola({ run: async () => [new ArrayBuffer(4)] }, [])).resolves.toHaveLength(1);
+  });
+
+  it('con la señal cancelada termina antes de la siguiente inferencia y libera la foto', async () => {
+    simularAnalisisEpp({ personas: [persona(0, 1, 1), persona(0.3, 0, 0), persona(0.6, 1, 0)] });
+    const control = new AbortController();
+    const modelos = modelosSimulados();
+    const clasificar = modelos.clasificador.run.bind(modelos.clasificador);
+    modelos.clasificador.run = async (entradas) => {
+      control.abort();
+      return clasificar(entradas);
+    };
+    await expect(
+      analizarFoto('file:///x.jpg', { modelos: async () => modelos, abrir: abrirFotoSimulada }, control.signal),
+    ).rejects.toBeInstanceOf(AnalisisCancelado);
+    expect(llamadas.clasificador).toBe(1);
+    expect(llamadas.liberadas).toBe(1);
+  });
+});
+
 describe('analizarConLimite (criterio 5)', () => {
   const resultado: ResultadoEpp = {
     personas: 1,
@@ -138,6 +206,47 @@ describe('analizarConLimite (criterio 5)', () => {
     expect(estado).toEqual({ estado: 'fallo' });
     terminar(resultado);
     await expect(promesa).resolves.toEqual({ estado: 'fallo' });
+  });
+
+  it('al vencer, cancela el análisis para que deje de usar los modelos', async () => {
+    jest.useFakeTimers();
+    let senal: AbortSignal | null = null;
+    const promesa = analizarConLimite('u', 5000, (_u, s) => {
+      senal = s;
+      return new Promise(() => {});
+    });
+    expect(senal!.aborted).toBe(false);
+    await jest.advanceTimersByTimeAsync(5000);
+    await expect(promesa).resolves.toEqual({ estado: 'fallo' });
+    expect(senal!.aborted).toBe(true);
+  });
+
+  it('se puede cortar desde afuera (otra foto, «Otro control»)', async () => {
+    const afuera = new AbortController();
+    let senal: AbortSignal | null = null;
+    const promesa = analizarConLimite(
+      'u',
+      5000,
+      (_u, s) => {
+        senal = s;
+        return new Promise(() => {});
+      },
+      afuera.signal,
+    );
+    afuera.abort();
+    await expect(promesa).resolves.toEqual({ estado: 'fallo' });
+    expect(senal!.aborted).toBe(true);
+  });
+
+  it('una cancelación no se registra como error', async () => {
+    const aviso = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    aviso.mockClear();
+    await expect(
+      analizarConLimite('u', 5000, async () => {
+        throw new AnalisisCancelado();
+      }),
+    ).resolves.toEqual({ estado: 'fallo' });
+    expect(aviso).not.toHaveBeenCalled();
   });
 
   it('el límite por defecto es de 5 s', async () => {

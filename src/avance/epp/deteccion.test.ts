@@ -97,6 +97,12 @@ describe('personasParaClasificar', () => {
     expect(personas[0]!.alto).toBeCloseTo(65);
   });
 
+  it('descarta una caja pegada al borde que quedó sin ancho (x0 = x1 = 1)', () => {
+    const borde: CajaNormalizada = { x0: 1, y0: 0.2, x1: 1, y1: 0.9, puntaje: 0.9 };
+    const sinAlto: CajaNormalizada = { x0: 0.2, y0: 1, x1: 0.3, y1: 1, puntaje: 0.9 };
+    expect(personasParaClasificar([borde, sinAlto, caja(0.5, 0.6)], 1280, 960, 0)).toHaveLength(1);
+  });
+
   it('como máximo 10, las de mayor puntaje', () => {
     const cajas = Array.from({ length: 12 }, (_, i) => caja(0.5, i / 20));
     const personas = personasParaClasificar(cajas, 1280, 960);
@@ -114,6 +120,13 @@ describe('cajaRecorte', () => {
       ancho: 120,
       alto: 360,
     });
+  });
+
+  it('el origen queda dentro de la foto aunque la caja esté en el borde', () => {
+    expect(cajaRecorte({ x: 1280, y: 960, ancho: 0, alto: 0 }, 1280, 960)).toEqual({ x: 1279, y: 959, ancho: 1, alto: 1 });
+    const recorte = cajaRecorte({ x: 1279.6, y: 100, ancho: 0.4, alto: 500 }, 1280, 960);
+    expect(recorte.x + recorte.ancho).toBeLessThanOrEqual(1280);
+    expect(recorte.x).toBeLessThanOrEqual(1279);
   });
 
   it('no sale de la foto', () => {

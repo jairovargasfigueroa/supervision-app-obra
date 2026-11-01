@@ -31,6 +31,17 @@ export function abrirArchivo(uri: string): File | null {
   return archivo.exists ? archivo : null;
 }
 
+/**
+ * Borra un archivo solo si está en la caché de la app (p. ej. el original que deja `expo-image-picker`),
+ * para no tocar nunca un archivo del usuario.
+ */
+export function borrarDeCache(uri: string | null | undefined): void {
+  const cache = Paths.cache.uri.replace(/\/*$/, '/');
+  if (uri && uri.startsWith(cache)) {
+    borrarArchivo(uri);
+  }
+}
+
 /** Borra el archivo si existe (al confirmarse el registro o al descartarlo, criterio 10). */
 export function borrarArchivo(uri: string | null | undefined): void {
   if (!uri) {
