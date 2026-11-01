@@ -53,7 +53,18 @@ jest.mock('expo-image-picker', () =>
   jest.requireActual('./src/pruebas/imagen-simulada').moduloSelector,
 );
 
+// Análisis de casco y chaleco (301): sin TensorFlow Lite ni manipulador nativo, los modelos y la foto
+// son simulados (src/pruebas/epp-simulado.ts; por defecto, una foto sin personas).
+jest.mock('./src/avance/epp/modelos', () => ({
+  ...jest.requireActual('./src/avance/epp/modelos'),
+  cargarModelos: jest.fn(() => jest.requireActual('./src/pruebas/epp-simulado').cargarModelosSimulados()),
+}));
+jest.mock('./src/avance/epp/imagen', () => ({
+  abrirFoto: jest.fn((uri: string) => jest.requireActual('./src/pruebas/epp-simulado').abrirFotoSimulada(uri)),
+}));
+
 beforeEach(() => {
+  jest.requireActual<typeof import('./src/pruebas/epp-simulado')>('./src/pruebas/epp-simulado').simularAnalisisEpp();
   jest.requireMock<typeof import('./src/pruebas/secure-store-simulado')>(
     'expo-secure-store',
   ).reiniciarSecureStore();
