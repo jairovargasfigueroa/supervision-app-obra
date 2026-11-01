@@ -2,11 +2,12 @@
 // comprimida con su `fotoId` y su registro. Desde la 102 la foto no se sube en el momento: se guarda
 // en el celular (`pendientes/{fotoId}.jpg`) y entra a la cola como operación `FOTO_AVANCE`; el
 // subidor la sube a S3 cuando hay señal y después se envía el registro. Desde la 301, al tener la foto
-// comprimida se analiza en el celular (casco y chaleco) y se muestra el resultado.
+// comprimida se analiza en el celular (casco y chaleco) y el resultado viaja en `datos.deteccion`.
 import { useCallback, useMemo, useState } from 'react';
 
 import { MENSAJE_FOTO_NO_PREPARADA, MENSAJES } from '../api/errores';
 import type { ObraPaquete } from '../api/sincronizacion';
+import { deteccionParaEnvio } from '../avance/epp/analisis';
 import { useAnalisisEpp } from '../avance/epp/useAnalisisEpp';
 import { nuevoUuid } from '../nucleo/uuid';
 import { borrarArchivo, guardarFotoPendiente } from '../sync/archivos';
@@ -50,7 +51,7 @@ export function useFotoAvance(obra: ObraPaquete) {
     [operaciones.data],
   );
 
-  const { analizar, limpiar } = epp;
+  const { analizar, resultadoDe, limpiar } = epp;
   const elegirFoto = useCallback(
     async (origen: OrigenFoto) => {
       setAviso(null);
@@ -85,6 +86,9 @@ export function useFotoAvance(obra: ObraPaquete) {
     setEnviando(true);
     setResultado(null);
     setFallo(null);
+    // 301: si todavía se está analizando, se espera (como mucho 5 s); si falló, va sin detección.
+    const analisis = await resultadoDe(foto.fotoId);
+    const deteccion = analisis?.estado === 'listo' ? deteccionParaEnvio(analisis.resultado) : null;
     let archivo: string | null = null;
     try {
       archivo = guardarFotoPendiente(foto.foto.uri, foto.fotoId);
@@ -104,6 +108,7 @@ export function useFotoAvance(obra: ObraPaquete) {
           obraId: obra.id,
           partidaId,
           tomadaEn: foto.tomadaEn,
+          ...(deteccion ? { deteccion } : {}),
         },
         descripcion: descripcionFoto(partida),
         archivoLocal: archivo,
@@ -123,7 +128,7 @@ export function useFotoAvance(obra: ObraPaquete) {
     } finally {
       setEnviando(false);
     }
-  }, [falta, partidaId, foto, obra, registrar, limpiar]);
+  }, [falta, partidaId, foto, obra, registrar, resultadoDe, limpiar]);
 
   return {
     partidaId,

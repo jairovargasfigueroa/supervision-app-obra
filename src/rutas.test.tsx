@@ -446,6 +446,8 @@ describe('enviar la foto de avance (005 con la cola de la 102)', () => {
         partidaId: 'p1',
         tomadaEn: expect.any(String),
         claveArchivo: `fotos/o1/${op.idOperacion}.jpg`,
+        // 301: foto analizada sin personas.
+        deteccion: { personas: 0, sinCasco: 0, sinChaleco: 0, versionModelo: 'epp-1.0.0' },
       },
     ]);
     expect(op.estado).toBe('ENVIADO');
@@ -527,6 +529,35 @@ describe('casco y chaleco en la foto de avance (301)', () => {
     await tomarFoto();
     expect(await screen.findByText('Personas: 1 · Sin casco: 0 · Sin chaleco: 0')).toBeTruthy();
     expect(screen.queryByText(AVISO_EPP)).toBeNull();
+  });
+
+  it('«Enviar» pone la detección en datos de FOTO_AVANCE de la cola (criterios 6 y 9)', async () => {
+    simularAnalisisEpp({ personas: CUADRILLA });
+    await tomarFoto();
+    await screen.findByText(RESUMEN_CUADRILLA);
+    await fireEvent.press(screen.getByRole('button', { name: /Enviar/ }));
+    expect(await screen.findByText(GUARDADO)).toBeTruthy();
+    const [op] = await listar('id-usuario1');
+    expect(op!.datos).toEqual({
+      id: op!.idOperacion,
+      obraId: 'o1',
+      partidaId: 'p1',
+      tomadaEn: expect.any(String),
+      deteccion: DETECCION_CUADRILLA,
+    });
+    // La foto enviada se quita junto con su resultado.
+    expect(screen.queryByText(RESUMEN_CUADRILLA)).toBeNull();
+  });
+
+  it('si se pulsa «Enviar» mientras analiza, espera el resultado y lo envía', async () => {
+    simularAnalisisEpp({ personas: CUADRILLA, demoraMs: 100 });
+    await tomarFoto();
+    expect(screen.getByText('Analizando…')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: /Enviar/ }));
+    // Detector y 4 recortes con 100 ms cada uno.
+    await screen.findByText(GUARDADO, {}, { timeout: 3000 });
+    const [op] = await listar('id-usuario1');
+    expect(op!.datos.deteccion).toEqual(DETECCION_CUADRILLA);
   });
 
   it('si el análisis falla: «No se pudo analizar la foto» y se envía sin detección (criterio 5)', async () => {
