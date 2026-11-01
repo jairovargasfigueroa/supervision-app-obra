@@ -6,7 +6,7 @@ import { subirSiguiente } from './subidor';
 const T0 = new Date('2026-11-15T14:00:00.000Z');
 const ARCHIVO = 'file:///documento/pendientes/f1.jpg';
 
-async function fotoPendiente(id = 'f1', archivo = ARCHIVO) {
+async function fotoPendiente(id = 'f1', archivo = ARCHIVO, extra: Record<string, unknown> = {}) {
   escribirArchivo(archivo);
   await agregar(
     {
@@ -15,7 +15,7 @@ async function fotoPendiente(id = 'f1', archivo = ARCHIVO) {
       usuarioNombre: 'Ana',
       tipo: 'FOTO_AVANCE',
       obraId: 'o1',
-      datos: { id, obraId: 'o1', partidaId: 'p1', tomadaEn: '2026-11-15T13:59:00Z' },
+      datos: { id, obraId: 'o1', partidaId: 'p1', tomadaEn: '2026-11-15T13:59:00Z', ...extra },
       descripcion: 'Foto de avance · P-01',
       archivoLocal: archivo,
     },
@@ -112,6 +112,23 @@ describe('subidor (102)', () => {
     });
     expect(urls).toHaveLength(2);
     expect(urls[1]).not.toBe(urls[0]);
+  });
+
+  it('la detección de casco y chaleco sigue en datos tras un reintento y la subida (301, criterio 9)', async () => {
+    const deteccion = { personas: 4, sinCasco: 1, sinChaleco: 2, versionModelo: 'epp-1.0.0' };
+    await fotoPendiente('f1', ARCHIVO, { deteccion });
+    simular({ put: (n) => new Response(null, { status: n === 1 ? 500 : 200 }) });
+    await subirSiguiente(opciones());
+    expect((await obtener('f1'))?.datos).toMatchObject({ deteccion });
+    await subirSiguiente(opciones(new Date('2026-11-15T14:00:01.000Z')));
+    expect((await obtener('f1'))?.datos).toEqual({
+      id: 'f1',
+      obraId: 'o1',
+      partidaId: 'p1',
+      tomadaEn: '2026-11-15T13:59:00Z',
+      deteccion,
+      claveArchivo: 'fotos/o1/f1.jpg',
+    });
   });
 
   it('sin señal o con tiempo agotado al pedir la URL, reintento', async () => {

@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 
 import { comprimirFoto, obtenerFoto, reduccion, tomadaEnDeExif } from './foto';
 import { contextoSimulado, simularManipulador } from '../pruebas/imagen-simulada';
+import { archivosSimulados, escribirArchivo } from '../pruebas/archivos-simulados';
 
 // expo-image-manipulator y expo-image-picker están simulados en jest.setup.ts.
 
@@ -122,6 +123,28 @@ describe('obtenerFoto (criterio 1)', () => {
     const resultado = await obtenerFoto('galeria', ahora);
     expect(galeria).toHaveBeenCalledWith(expect.objectContaining({ exif: true }));
     expect(resultado).toMatchObject({ tipo: 'lista', foto: { tomadaEn: '2026-11-14T13:00:00.000Z' } });
+  });
+
+  it('borra el original que el selector deja en la caché de la app (301, criterio 11)', async () => {
+    escribirArchivo('file:///cache/ImagePicker/original.jpg');
+    camara.mockResolvedValue({ canceled: false, assets: [asset({ uri: 'file:///cache/ImagePicker/original.jpg' })] });
+    await expect(obtenerFoto('camara', ahora)).resolves.toMatchObject({ tipo: 'lista' });
+    expect(archivosSimulados()).toEqual([]);
+  });
+
+  it('también lo borra si la compresión falla', async () => {
+    escribirArchivo('file:///cache/ImagePicker/original.jpg');
+    galeria.mockResolvedValue({ canceled: false, assets: [asset({ uri: 'file:///cache/ImagePicker/original.jpg' })] });
+    contextoSimulado().renderAsync.mockRejectedValueOnce(new Error('imagen rota'));
+    await expect(obtenerFoto('galeria', ahora)).rejects.toThrow('imagen rota');
+    expect(archivosSimulados()).toEqual([]);
+  });
+
+  it('no toca un archivo que no está en la caché de la app', async () => {
+    escribirArchivo('file:///documento/fotos/original.jpg');
+    galeria.mockResolvedValue({ canceled: false, assets: [asset({ uri: 'file:///documento/fotos/original.jpg' })] });
+    await obtenerFoto('galeria', ahora);
+    expect(archivosSimulados()).toEqual(['file:///documento/fotos/original.jpg']);
   });
 
   it('si el usuario cancela no hay foto', async () => {

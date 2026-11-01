@@ -52,7 +52,7 @@ export class File {
   }
 }
 
-export const Paths = { document: new Directory('file:///documento') };
+export const Paths = { document: new Directory('file:///documento'), cache: new Directory('file:///cache') };
 
 /** Escribe un archivo (para preparar una prueba). */
 export function escribirArchivo(uri: string, contenido = 'jpeg'): void {

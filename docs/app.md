@@ -11,7 +11,8 @@
 | Stock de la obra | Almacenero | — | Base |
 | Pendientes de envío | Maestro, almacenero | Sincronización | Capa 1 |
 | Diario de obra (fecha, clima y texto del día; últimos 30 días) | Maestro | Registrar entrada del diario | Capa 1 |
-| Aviso de casco y chaleco en la foto | Maestro | IA en el dispositivo | Capa 3 |
+| Aviso de casco y chaleco en la foto (spec 301) | Maestro | IA en el dispositivo | Capa 3 |
+| Control de seguridad: foto de la cuadrilla analizada en el celular, sin enviarla ni guardarla (spec 301) | Maestro | IA en el dispositivo | Capa 3 |
 
 El menú muestra solo las opciones del rol del usuario.
 

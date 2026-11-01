@@ -1,8 +1,9 @@
 import { useLocalSearchParams } from 'expo-router';
-import { Image, ScrollView, StyleSheet, View } from 'react-native';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import { ActivityIndicator, Button, HelperText, Snackbar, Surface, Text } from 'react-native-paper';
 
 import type { ObraPaquete } from '../../../../api/sincronizacion';
+import { FotoConRecuadros, ResumenEpp } from '../../../../componentes/AnalisisEpp';
 import { ConObraLocal } from '../../../../componentes/ConObraLocal';
 import { EstadoVacio } from '../../../../componentes/EstadoVacio';
 import { SelectorPartida } from '../../../../componentes/SelectorPartida';
@@ -12,7 +13,9 @@ import { radios, TAMANO_TACTIL_MINIMO, useTema } from '../../../../tema';
 
 // Foto de avance de una obra (005, maestro): partida, cámara o galería, vista previa y «Enviar».
 // Desde la 102 la obra sale del paquete guardado en el celular y la foto se guarda y entra a la cola:
-// funciona sin señal. Con `key`, el formulario empieza de cero en cada obra.
+// funciona sin señal. Desde la 301, la foto se analiza en el celular (casco y chaleco) y se muestran
+// el resumen, el aviso y los recuadros; «Enviar» no se bloquea. Con `key`, el formulario empieza de
+// cero en cada obra.
 export default function PantallaFotoDeAvance() {
   const { id } = useLocalSearchParams<{ id: string }>();
   return (
@@ -26,7 +29,7 @@ function FotoDeAvanceDeObra({ obra }: { obra: ObraPaquete }) {
   const { colors } = useTema();
   const formulario = useFotoAvance(obra);
   const ocupado = formulario.preparando || formulario.enviando;
-  const { fallo, foto } = formulario;
+  const { fallo, foto, analisisEpp } = formulario;
   return (
     <View style={estilos.pantalla}>
       <ScrollView contentContainerStyle={estilos.contenido} keyboardShouldPersistTaps="handled">
@@ -80,19 +83,17 @@ function FotoDeAvanceDeObra({ obra }: { obra: ObraPaquete }) {
         {formulario.preparando ? <ActivityIndicator accessibilityLabel="Preparando la foto" /> : null}
         {foto ? (
           <View style={estilos.vistaPrevia}>
-            <Image
-              source={{ uri: foto.foto.uri }}
-              accessibilityLabel="Vista previa de la foto"
+            <FotoConRecuadros
+              uri={foto.foto.uri}
+              ancho={foto.foto.ancho}
+              alto={foto.foto.alto}
+              resultado={analisisEpp?.estado === 'listo' ? analisisEpp.resultado : null}
               testID="vista-previa"
-              resizeMode="cover"
-              style={[
-                estilos.imagen,
-                { aspectRatio: proporcion(foto.foto.ancho, foto.foto.alto) },
-              ]}
             />
             <Text variant="bodySmall" style={{ color: colors.textoSecundario }}>
               Tomada el {formatearFechaHora(foto.tomadaEn)}
             </Text>
+            <ResumenEpp estado={analisisEpp} />
           </View>
         ) : null}
         {formulario.aviso ? (
@@ -149,8 +150,6 @@ function FotoDeAvanceDeObra({ obra }: { obra: ObraPaquete }) {
   );
 }
 
-const proporcion = (ancho: number, alto: number) => (ancho > 0 && alto > 0 ? ancho / alto : 4 / 3);
-
 const estilos = StyleSheet.create({
   pantalla: { flex: 1 },
   contenido: { padding: 16, gap: 12 },
@@ -160,7 +159,6 @@ const estilos = StyleSheet.create({
   botones: { flexDirection: 'row', gap: 12 },
   boton: { flex: 1 },
   contenidoBoton: { minHeight: TAMANO_TACTIL_MINIMO },
-  vistaPrevia: { gap: 4 },
-  imagen: { width: '100%', borderRadius: radios.tarjeta },
+  vistaPrevia: { gap: 8 },
   fallo: { borderRadius: radios.tarjeta, padding: 12, gap: 4, alignItems: 'flex-start' },
 });

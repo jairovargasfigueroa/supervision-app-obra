@@ -3,6 +3,8 @@
 import { ImageManipulator, SaveFormat } from 'expo-image-manipulator';
 import * as ImagePicker from 'expo-image-picker';
 
+import { borrarDeCache } from '../sync/archivos';
+
 export const LADO_MAXIMO_PX = 1280;
 export const CALIDAD_JPEG = 0.7;
 
@@ -119,5 +121,15 @@ export async function obtenerFoto(
     return { tipo: 'cancelada' };
   }
   const tomadaEn = origen === 'camara' ? ahora().toISOString() : tomadaEnDeExif(elegida.exif, ahora());
-  return { tipo: 'lista', foto: { foto: await comprimirFoto(elegida.uri), tomadaEn } };
+  let comprimida: FotoComprimida | null = null;
+  try {
+    comprimida = await comprimirFoto(elegida.uri);
+    return { tipo: 'lista', foto: { foto: comprimida, tomadaEn } };
+  } finally {
+    // El original que deja el selector en la caché no se usa más (301, criterio 11: el control de
+    // seguridad no guarda fotos). Solo se borra si está en la caché de la app.
+    if (comprimida?.uri !== elegida.uri) {
+      borrarDeCache(elegida.uri);
+    }
+  }
 }
