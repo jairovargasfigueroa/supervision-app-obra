@@ -26,6 +26,8 @@ npx expo-doctor            # revisar dependencias y configuración
 npx expo export --platform android --output-dir <carpeta temporal fuera del repo>  # compilar sin celular
 ```
 
+*Development build* de Android (necesaria desde la 301 por TensorFlow Lite; no funciona en Expo Go): `npx expo prebuild --platform android` y `npx expo run:android --port 8090` con el celular conectado. En Windows hace falta CMake 3.31.6 en `android/local.properties` (rutas largas). Pasos en el `README.md`.
+
 ### Celular en desarrollo (Android)
 
 - `app.json` → `extra` apunta a `localhost`: `keycloakUrl` `http://localhost:8080` (realm `supervision`, cliente `app-obra`), `obrasUrl` `http://localhost:8081`, `materialesUrl` `http://localhost:8082`. **No se cambia por la IP de la computadora:** el emisor (`iss`) del token tiene que ser `http://localhost:8080/realms/supervision`, el mismo que validan los servicios; si el celular entrara por la IP, el token saldría con otro emisor y los servicios lo rechazarían.

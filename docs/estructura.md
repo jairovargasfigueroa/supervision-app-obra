@@ -8,6 +8,14 @@ Expo SDK 58, `expo-router`, `react-native-paper` 5 + `react-native-safe-area-con
 
 `expo-image-picker` se configura con su *config plugin* en `app.json` → `plugins`: textos de permiso de cámara y fotos en español y `microphonePermission: false` (la app no graba video, así Android no pide el micrófono).
 
+Capa 3 (301, casco y chaleco en el celular): `react-native-fast-tflite` 3.0.1 (TensorFlow Lite / LiteRT 1.4 en C++), que desde la versión 3 está hecho con Nitro y pide `react-native-nitro-modules` (0.37.1) como dependencia par; `expo-dev-client` 58 (la librería tiene código nativo: no funciona en Expo Go, se usa una *development build*); `jpeg-js` 0.4 (JPEG → píxeles en JavaScript) y `buffer` 6 (base64 → bytes). Todas con `npx expo install`; las tres de fuera del SDK quedan con `^` (`expo install` no las conoce y toma la última). Compatibilidad comprobada el 01/11/2026: la versión 3 declara `react-native: *`, usa la nueva arquitectura (la única de RN 0.88) y su *config plugin* es de `@expo/config-plugins`; la prueba que vale es la compilación de Android, que pasa (ver README).
+
+- `app.json` → `plugins`: `["react-native-fast-tflite", { "enableAndroidGpuLibraries": true }]` (agrega `libOpenCL.so` como biblioteca nativa opcional en el `AndroidManifest`, para el delegado GPU). `android.package` es `com.supervision.appobra` (lo pide `prebuild`; antes no hacía falta porque solo se usaba Expo Go).
+- `package.json` → `expo.doctor.reactNativeDirectoryCheck.exclude`: `react-native-fast-tflite`. React Native Directory la marca «Untested on New Architecture», pero la versión 3 (módulo Nitro) compila y enlaza con RN 0.88 y la nueva arquitectura (`newArchEnabled=true` en la *development build*).
+- `metro.config.js`: la configuración de Expo más `tflite` en `resolver.assetExts`, para empaquetar `assets/modelos/*.tflite` con `require(...)`.
+- Carpetas nativas: `android/` e `ios/` se regeneran con `npx expo prebuild` (*Continuous Native Generation*, lo que recomienda Expo) y están en `.gitignore`; no se versionan ni se editan a mano. Lo nativo se configura en `app.json` y con *config plugins*.
+- Con `expo-dev-client` instalado, `npm start` abre la *development build* por defecto; para seguir usando Expo Go en lo que no es la 301, pulsar `s` en Metro («switch to Expo Go»). En Expo Go el análisis dice «No se pudo analizar la foto» (la librería se carga recién al analizar, así el resto de la app funciona).
+
 ## Tema
 
 `src/tema.ts`: `MD3LightTheme` de Paper extendido con los colores de `docs/diseno-visual.md` (primario `#0E4D5C`, secundario `#F08A24`, éxito `#1B7343`, atención `#9A4A00`, error `#B42318`, fondo `#F2F5F6`), `roundness` de 1,2 (botones de 6 px) y las constantes `radios.tarjeta` (10) y `radios.control` (6) para tarjetas, diálogos y campos, porque Paper deriva todos los radios de un solo valor. Inter con `expo-font`.
