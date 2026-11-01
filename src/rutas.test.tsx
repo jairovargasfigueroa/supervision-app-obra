@@ -548,6 +548,80 @@ describe('casco y chaleco en la foto de avance (301)', () => {
   });
 });
 
+describe('control de seguridad (301, criterios 10 y 11)', () => {
+  beforeEach(() => {
+    obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([OBRA_PAQUETE]));
+    jest.mocked(ImagePicker.launchCameraAsync).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///original.jpg', width: 4000, height: 3000 }],
+    });
+  });
+
+  const abrirControl = async () => {
+    await guardarTokens(sesionDe(['maestro']));
+    await renderRouter('src/app', { initialUrl: '/obras/o1/control-seguridad' });
+  };
+
+  it('el maestro lo abre desde su obra en «Mis obras»', async () => {
+    await entrarCon(['maestro']);
+    await fireEvent.press(await screen.findByLabelText('Control de seguridad: Edificio Las Palmas'));
+    expect(await screen.findByText('La foto se analiza en el celular y no se envía ni se guarda.')).toBeTruthy();
+    expect(screen).toHavePathname('/obras/o1/control-seguridad');
+  });
+
+  it('el almacenero no lo tiene', async () => {
+    await guardarTokens(sesionDe(['almacenero']));
+    await renderRouter('src/app', { initialUrl: '/obras/o1/control-seguridad' });
+    await screen.findAllByText('Stock');
+    expect(screen).not.toHavePathname('/obras/o1/control-seguridad');
+    expect(screen.queryByText('Control de seguridad')).toBeNull();
+  });
+
+  it('analiza con el mismo resumen, aviso y recuadros; no envía ni guarda la foto; «Otro control» deja tomar otra', async () => {
+    simularAnalisisEpp({ personas: CUADRILLA });
+    await abrirControl();
+    await fireEvent.press(await screen.findByRole('button', { name: /Tomar foto/ }));
+    expect(await screen.findByText(RESUMEN_CUADRILLA)).toBeTruthy();
+    expect(screen.getByText(AVISO_EPP)).toBeTruthy();
+    expect(screen.getAllByTestId('recuadro-epp')).toHaveLength(3);
+    expect(screen.queryByRole('button', { name: /Enviar/ })).toBeNull();
+
+    // Nada a la cola ni a la red.
+    expect(await listar('id-usuario1')).toEqual([]);
+    expect(soloPaquete()).toBe(true);
+
+    await fireEvent.press(screen.getByRole('button', { name: /Otro control/ }));
+    expect(screen.queryByTestId('vista-previa-control')).toBeNull();
+    expect(screen.queryByText(RESUMEN_CUADRILLA)).toBeNull();
+
+    simularAnalisisEpp();
+    await fireEvent.press(screen.getByRole('button', { name: /Tomar foto/ }));
+    expect(await screen.findByText('No se detectaron personas')).toBeTruthy();
+  });
+
+  it('si el análisis falla lo dice (criterio 5)', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    simularAnalisisEpp({ falla: true });
+    jest.mocked(ImagePicker.launchImageLibraryAsync).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///galeria.jpg', width: 4000, height: 3000 }],
+    });
+    await abrirControl();
+    await fireEvent.press(await screen.findByRole('button', { name: /Galería/ }));
+    expect(await screen.findByText('No se pudo analizar la foto')).toBeTruthy();
+  });
+
+  it('borra la foto comprimida del celular con «Otro control»', async () => {
+    escribirArchivo('file:///comprimida.jpg');
+    await abrirControl();
+    await fireEvent.press(await screen.findByRole('button', { name: /Tomar foto/ }));
+    await screen.findByText('No se detectaron personas');
+    expect(archivosSimulados()).toEqual(['file:///comprimida.jpg']);
+    await fireEvent.press(screen.getByRole('button', { name: /Otro control/ }));
+    expect(archivosSimulados()).toEqual([]);
+  });
+});
+
 describe('ingreso y salida de material (004, con la cola de la 101)', () => {
   const CEMENTO = { id: 'm1', codigo: 'CEM-IP30', nombre: 'Cemento IP-30', unidad: 'bolsa', unidadPlural: 'bolsas' };
   const cuerpo = (init: RequestInit) => JSON.parse(String(init.body));

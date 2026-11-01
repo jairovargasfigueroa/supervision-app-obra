@@ -87,6 +87,14 @@ export const PANTALLAS_OBRA = [
     roles: ['maestro'],
   },
   {
+    // 301: foto de la cuadrilla analizada en el celular (casco y chaleco); no se envía ni se guarda.
+    ruta: 'obras/[id]/control-seguridad',
+    titulo: 'Control de seguridad',
+    accion: 'Control de seguridad',
+    icono: 'hard-hat',
+    roles: ['maestro'],
+  },
+  {
     ruta: 'obras/[id]/ingreso',
     titulo: 'Ingreso de material',
     accion: 'Ingreso',

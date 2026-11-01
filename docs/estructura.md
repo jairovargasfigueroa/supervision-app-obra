@@ -45,6 +45,7 @@ src/
     (app)/(pestanas)/pendientes.tsx  # pestaña Pendientes con contador (maestro y almacenero, 101)
     (app)/obras/[id]/foto.tsx        # maestro (005)
     (app)/obras/[id]/diario.tsx      # maestro (103)
+    (app)/obras/[id]/control-seguridad.tsx  # maestro (301)
     (app)/obras/[id]/ingreso.tsx     # almacenero
     (app)/obras/[id]/salida.tsx      # almacenero
     (app)/obras/[id]/stock.tsx       # almacenero
@@ -63,7 +64,7 @@ src/
                    stock superado, con la respuesta o con el stock mostrado), useMovimiento.ts (TanStack Form
                    sobre el paquete local + registro en la cola, 101), foto.esquema.ts (Zod), foto.ts (cámara, galería y compresión),
                    useFotoAvance.ts (estado de la pantalla; desde la 102 guarda la foto y la pone en la cola;
-                   desde la 301 la analiza)
+                   desde la 301 la analiza), useControlSeguridad.ts (301: foto de la cuadrilla, sin envío)
   componentes/     BarraSuperior.tsx, EncabezadoApp.tsx (barra con sesión: «Cerrar sesión» con aviso de pendientes, 101), PantallaVacia.tsx, EstadoChip.tsx, EstadoVacio.tsx, EstadoError.tsx,
                    ObrasAsignadas.tsx (obras del paquete local, con «Sin señal · datos del …»), TituloObra.tsx,
                    AnalisisEpp.tsx (301: ResumenEpp y FotoConRecuadros), AvisoSinSenal.tsx (101), PendientesEnvio.tsx (pantalla «Pendientes de envío», 101), DiarioObra.tsx (103), ConObraLocal.tsx (la obra del paquete guardado, 101), FormularioMovimiento.tsx
@@ -187,3 +188,5 @@ src/
 - Pruebas de la 301 (módulo): `avance/epp/deteccion.test.ts` (anclas iguales a los metadatos, decodificación, IoU y supresión, 64 px y máximo 10, recorte, conteo con umbrales, píxeles), `modelos.test.ts` (`epp.json`, GPU y vuelta a CPU, elección de salidas), `analisis.test.ts` (con modelos simulados: conteo, recortes, umbrales, máximo 10, liberar la foto, 5 s) e `imagen.test.ts`.
 - **Pantalla Foto de avance** (`obras/[id]/foto`, criterios 1 a 5): al tener la foto comprimida (con su `fotoId`), `useFotoAvance` llama a `analizar(fotoId, uri)`; bajo la vista previa (`FotoConRecuadros`, la imagen con un recuadro de borde color error sobre cada persona sin casco o sin chaleco, en porcentaje de la foto analizada) va `ResumenEpp`: «Analizando…», el resumen «Personas: N · Sin casco: N · Sin chaleco: N» con el aviso en el fondo de atención si alguno es mayor que 0, «No se detectaron personas» o «No se pudo analizar la foto». «Enviar» no depende del análisis. Una foto nueva reemplaza el resultado; al enviar, la foto y su resultado se quitan.
 - Pruebas (pantalla): en `rutas.test.tsx`, resumen con aviso y 3 recuadros, «Enviar» habilitado, sin personas, todos protegidos, análisis fallido y que la foto no va a ningún servidor (solo se pide el paquete).
+- **Control de seguridad** (`obras/[id]/control-seguridad`, criterios 10 y 11): botón «Control de seguridad» (ícono `hard-hat`) en cada obra de «Mis obras» para el `maestro` (`PANTALLAS_OBRA` de `roles.ts`, protegida con `Stack.Protected` como las demás pantallas de obra). La app no tiene otra pantalla de «detalle de la obra»: la tarjeta de la obra con sus botones cumple ese papel (decisión de implementación). «Tomar foto» o «Galería» → compresión de la 005 → `analizarFoto` → `FotoConRecuadros` y `ResumenEpp` (los mismos de la foto de avance) y «Otro control». No hay «Enviar»: no se usa la cola ni la red, y el JPEG comprimido (en la caché) se borra con «Otro control», al tomar otra foto o al salir de la pantalla (`useControlSeguridad`). Arriba, «La foto se analiza en el celular y no se envía ni se guarda.».
+- Pruebas (control de seguridad): en `rutas.test.tsx`, el maestro lo abre desde «Mis obras» y el almacenero no; resumen, aviso y recuadros sin «Enviar», nada en la cola ni en la red, «Otro control» y otra foto, análisis fallido y el archivo borrado con «Otro control»; `roles.test.ts`.

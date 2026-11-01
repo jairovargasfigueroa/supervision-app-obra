@@ -69,9 +69,16 @@ describe('pantallas de una obra («Mis obras»)', () => {
   const acciones = (roles: string[]) => pantallasObraPorRol(roles).map((pantalla) => pantalla.accion);
 
   it('maestro → Foto de avance; almacenero → Ingreso, Salida y Stock; con los dos, todas', () => {
-    expect(acciones(['maestro'])).toEqual(['Foto de avance', 'Diario de obra']);
+    expect(acciones(['maestro'])).toEqual(['Foto de avance', 'Diario de obra', 'Control de seguridad']);
     expect(acciones(['almacenero', 'residente'])).toEqual(['Ingreso', 'Salida', 'Stock']);
-    expect(acciones(['almacenero', 'maestro'])).toEqual(['Foto de avance', 'Diario de obra', 'Ingreso', 'Salida', 'Stock']);
+    expect(acciones(['almacenero', 'maestro'])).toEqual([
+      'Foto de avance',
+      'Diario de obra',
+      'Control de seguridad',
+      'Ingreso',
+      'Salida',
+      'Stock',
+    ]);
     expect(acciones(['residente'])).toEqual([]);
   });
 
