@@ -1,5 +1,6 @@
 import { CONFIG_SIMULADA } from '../../pruebas/epp-simulado';
 import { leerConfigEpp, versionModelo } from './config';
+import { contarEpp } from './deteccion';
 import { cargarModelosDesde, leerProbabilidades, salidasDetector, type ModeloTflite } from './modelos';
 
 const tensor = (name: string, shape: number[]) => ({ name, dataType: 'float32' as const, shape });
@@ -8,6 +9,28 @@ const modelo = (outputs: ReturnType<typeof tensor>[]): ModeloTflite => ({ inputs
 const buffer = (...valores: number[]) => Float32Array.from(valores).buffer as ArrayBuffer;
 
 describe('epp.json', () => {
+  it('el de assets/modelos/ es válido y aplica «lleva el EPP si p ≥ umbral» con sus umbrales', () => {
+    const config = leerConfigEpp(jest.requireActual('../../../assets/modelos/epp.json'));
+    expect(versionModelo(config)).toBe('epp-1.0.0');
+    expect(config.entrada).toEqual({ alto: 224, ancho: 224, canales: 3, tipo: 'float32' });
+    expect(config.salidas).toEqual(['casco', 'chaleco']);
+    const { casco, chaleco } = config.umbrales;
+    // Salida única [1, 2] = [p_casco, p_chaleco] (float32): por encima del umbral lleva el EPP; debajo, no.
+    // El caso p = umbral exacto está en deteccion.test.ts (contarEpp).
+    const clasificador = modelo([tensor('StatefulPartitionedCall_1:0', [1, 2])]);
+    const encima = leerProbabilidades(clasificador, [buffer(casco + 0.01, chaleco + 0.01)], config);
+    const debajo = leerProbabilidades(clasificador, [buffer(casco - 0.01, chaleco - 0.01)], config);
+    const conteo = contarEpp(
+      [encima, debajo].map((probabilidades) => ({ x: 0, y: 0, ancho: 10, alto: 80, probabilidades })),
+      config.umbrales,
+    );
+    expect(conteo).toMatchObject({ personas: 2, sinCasco: 1, sinChaleco: 1 });
+    expect(conteo.cajas.map((c) => [c.sinCasco, c.sinChaleco])).toEqual([
+      [false, false],
+      [true, true],
+    ]);
+  });
+
   it('lee el epp.json que escribe el entrenamiento', () => {
     const config = leerConfigEpp({
       version: '1.0.0',
