@@ -8,5 +8,6 @@ Marca cada tarea al terminarla (con sus pruebas y su commit).
 - [ ] Agregar `assets/modelos/` (`efficientdet_lite0.tflite`, `clasificador_epp.tflite`, `epp.json`) y confirmar el orden de salidas y el índice de «person» del detector
 - [ ] Módulo `src/avance/epp/`: carga de modelos, preparación de la imagen (320×320 y recortes 224×224), conteo con umbrales y tiempo límite de 5 s; pruebas de las funciones puras y de `analizarFoto` con modelos simulados
 - [ ] Pantalla de foto: «Analizando…», resumen, aviso no bloqueante y recuadros sobre la vista previa; mensaje si el análisis falla
-- [ ] Enviar `deteccion` en `POST /obras/{obraId}/fotos` y conservarla en los reintentos con el mismo `fotoId`; pruebas del cliente
+- [ ] Pantalla `obras/[id]/control-seguridad`: botón «Control de seguridad» en el detalle de la obra (rol `maestro`), mismo análisis, resumen, aviso y recuadros; «Otro control»; la foto y el resultado no se envían ni se guardan; pruebas
+- [ ] Enviar `deteccion` en `datos` de la operación `FOTO_AVANCE` de la cola (102), no en un `POST` directo a Obras (con la capa 1 la app envía por Sincronización, que la reenvía a `POST /obras/{obraId}/fotos`), y conservarla en los reintentos con el mismo `fotoId`; pruebas de la cola y del envío
 - [ ] Prueba manual en un Android de gama media con 5 fotos de referencia (tiempos y conteos anotados aquí)
