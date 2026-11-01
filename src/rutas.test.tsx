@@ -13,6 +13,7 @@ import { guardarTokens, leerTokens } from './sesion/tokens';
 import type { PaqueteDatos } from './api/sincronizacion';
 import { agregar, listar, marcarRechazada, obtener, tomarParaEnvio } from './sync/cola';
 import { guardarPaquete, leerPaquete } from './sync/paquete';
+import { llamadas as llamadasEpp, simularAnalisisEpp, type PersonaSimulada } from './pruebas/epp-simulado';
 
 // Las pruebas de navegación usan las rutas reales de src/app; Keycloak está simulado.
 jest.mock('./sesion/keycloak');
@@ -468,6 +469,82 @@ describe('enviar la foto de avance (005 con la cola de la 102)', () => {
     await prepararFoto();
     expect(await screen.findByText('Tienes 101 fotos sin enviar; busca señal para enviarlas')).toBeTruthy();
     expect(screen.getByRole('button', { name: /Enviar/ })).not.toBeDisabled();
+  });
+});
+
+// 301: cuatro personas; la de x 0,2 sin casco, las de x 0,4 y 0,6 sin chaleco.
+const CUADRILLA: PersonaSimulada[] = [
+  { x0: 0, y0: 0.2, x1: 0.1, y1: 0.7, casco: 0.9, chaleco: 0.9 },
+  { x0: 0.2, y0: 0.2, x1: 0.3, y1: 0.7, casco: 0.1, chaleco: 0.8 },
+  { x0: 0.4, y0: 0.2, x1: 0.5, y1: 0.7, casco: 0.8, chaleco: 0.2 },
+  { x0: 0.6, y0: 0.2, x1: 0.7, y1: 0.7, casco: 0.7, chaleco: 0.3 },
+];
+const RESUMEN_CUADRILLA = 'Personas: 4 · Sin casco: 1 · Sin chaleco: 2';
+const AVISO_EPP = 'Hay personas sin equipo de protección. Recuerda el uso de casco y chaleco.';
+const DETECCION_CUADRILLA = { personas: 4, sinCasco: 1, sinChaleco: 2, versionModelo: 'epp-1.0.0' };
+const GUARDADO = 'Guardado en el celular · se enviará cuando haya señal';
+
+/** Solo se pidió el paquete de datos: la foto no fue a ningún servidor. */
+const soloPaquete = () => fetchMock.mock.calls.every(([url]) => String(url).endsWith('/paquete-datos'));
+
+describe('casco y chaleco en la foto de avance (301)', () => {
+  beforeEach(() => {
+    obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([OBRA_PAQUETE]));
+    obras['POST /fotos/url-subida'] = () => Promise.reject(new TypeError('Network request failed'));
+    jest.mocked(ImagePicker.launchCameraAsync).mockResolvedValue({
+      canceled: false,
+      assets: [{ uri: 'file:///original.jpg', width: 4000, height: 3000 }],
+    });
+  });
+
+  const tomarFoto = async () => {
+    await guardarTokens(sesionDe(['maestro']));
+    await renderRouter('src/app', { initialUrl: '/obras/o1/foto' });
+    await fireEvent.press(await screen.findByText('P-01 · Losa de hormigón armado'));
+    await fireEvent.press(screen.getByRole('button', { name: /Tomar foto/ }));
+    await screen.findByTestId('vista-previa');
+  };
+
+  it('analiza la foto comprimida: resumen, aviso y un recuadro por persona señalada; «Enviar» sigue disponible (criterios 1 a 3)', async () => {
+    simularAnalisisEpp({ personas: CUADRILLA });
+    await tomarFoto();
+    expect(await screen.findByText(RESUMEN_CUADRILLA)).toBeTruthy();
+    expect(screen.getByText(AVISO_EPP)).toBeTruthy();
+    expect(screen.getAllByTestId('recuadro-epp')).toHaveLength(3);
+    expect(screen.getByRole('button', { name: /Enviar/ })).not.toBeDisabled();
+    expect(llamadasEpp.detector).toBe(1);
+  });
+
+  it('sin personas: «No se detectaron personas» y sin aviso (criterio 4)', async () => {
+    await tomarFoto();
+    expect(await screen.findByText('No se detectaron personas')).toBeTruthy();
+    expect(screen.queryByText(AVISO_EPP)).toBeNull();
+    expect(screen.queryAllByTestId('recuadro-epp')).toHaveLength(0);
+  });
+
+  it('con todos protegidos muestra el resumen sin aviso', async () => {
+    simularAnalisisEpp({ personas: [CUADRILLA[0]!] });
+    await tomarFoto();
+    expect(await screen.findByText('Personas: 1 · Sin casco: 0 · Sin chaleco: 0')).toBeTruthy();
+    expect(screen.queryByText(AVISO_EPP)).toBeNull();
+  });
+
+  it('si el análisis falla: «No se pudo analizar la foto» y se envía sin detección (criterio 5)', async () => {
+    jest.spyOn(console, 'warn').mockImplementation(() => {});
+    simularAnalisisEpp({ falla: true });
+    await tomarFoto();
+    expect(await screen.findByText('No se pudo analizar la foto')).toBeTruthy();
+    await fireEvent.press(screen.getByRole('button', { name: /Enviar/ }));
+    await screen.findByText(GUARDADO);
+    const [op] = await listar('id-usuario1');
+    expect(op!.datos).not.toHaveProperty('deteccion');
+  });
+
+  it('la foto no se manda a ningún servidor para analizarla (criterio 7)', async () => {
+    simularAnalisisEpp({ personas: CUADRILLA });
+    await tomarFoto();
+    await screen.findByText(RESUMEN_CUADRILLA);
+    expect(soloPaquete()).toBe(true);
   });
 });
 

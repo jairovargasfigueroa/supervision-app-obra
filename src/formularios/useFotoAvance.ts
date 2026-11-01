@@ -1,11 +1,13 @@
 // Estado de la pantalla Foto de avance (005 con la cola de la 101 y la 102): partida elegida, foto
 // comprimida con su `fotoId` y su registro. Desde la 102 la foto no se sube en el momento: se guarda
 // en el celular (`pendientes/{fotoId}.jpg`) y entra a la cola como operación `FOTO_AVANCE`; el
-// subidor la sube a S3 cuando hay señal y después se envía el registro.
+// subidor la sube a S3 cuando hay señal y después se envía el registro. Desde la 301, al tener la foto
+// comprimida se analiza en el celular (casco y chaleco) y se muestra el resultado.
 import { useCallback, useMemo, useState } from 'react';
 
 import { MENSAJE_FOTO_NO_PREPARADA, MENSAJES } from '../api/errores';
 import type { ObraPaquete } from '../api/sincronizacion';
+import { useAnalisisEpp } from '../avance/epp/useAnalisisEpp';
 import { nuevoUuid } from '../nucleo/uuid';
 import { borrarArchivo, guardarFotoPendiente } from '../sync/archivos';
 import {
@@ -29,6 +31,7 @@ export type FotoLista = FotoTomada & { fotoId: string };
 export function useFotoAvance(obra: ObraPaquete) {
   const { registrar } = useSincronizacion();
   const operaciones = useOperaciones();
+  const epp = useAnalisisEpp();
   const [partidaId, setPartidaId] = useState<string | null>(null);
   const [foto, setFoto] = useState<FotoLista | null>(null);
   const [preparando, setPreparando] = useState(false);
@@ -47,23 +50,30 @@ export function useFotoAvance(obra: ObraPaquete) {
     [operaciones.data],
   );
 
-  const elegirFoto = useCallback(async (origen: OrigenFoto) => {
-    setAviso(null);
-    setFallo(null);
-    setPreparando(true);
-    try {
-      const elegida = await obtenerFoto(origen);
-      if (elegida.tipo === 'lista') {
-        setFoto({ ...elegida.foto, fotoId: nuevoUuid() });
-      } else if (elegida.tipo === 'sin-permiso') {
-        setAviso(MENSAJE_SIN_PERMISO_CAMARA);
+  const { analizar, limpiar } = epp;
+  const elegirFoto = useCallback(
+    async (origen: OrigenFoto) => {
+      setAviso(null);
+      setFallo(null);
+      setPreparando(true);
+      try {
+        const elegida = await obtenerFoto(origen);
+        if (elegida.tipo === 'lista') {
+          const fotoId = nuevoUuid();
+          setFoto({ ...elegida.foto, fotoId });
+          // 301, criterio 1: ya comprimida, se analiza en el celular antes de enviarla.
+          void analizar(fotoId, elegida.foto.foto.uri);
+        } else if (elegida.tipo === 'sin-permiso') {
+          setAviso(MENSAJE_SIN_PERMISO_CAMARA);
+        }
+      } catch {
+        setAviso(MENSAJE_FOTO_NO_PREPARADA);
+      } finally {
+        setPreparando(false);
       }
-    } catch {
-      setAviso(MENSAJE_FOTO_NO_PREPARADA);
-    } finally {
-      setPreparando(false);
-    }
-  }, []);
+    },
+    [analizar],
+  );
 
   const falta = faltaParaEnviar({ partidaId, foto });
 
@@ -89,12 +99,18 @@ export function useFotoAvance(obra: ObraPaquete) {
         idOperacion: foto.fotoId,
         tipo: 'FOTO_AVANCE',
         obraId: obra.id,
-        datos: { id: foto.fotoId, obraId: obra.id, partidaId, tomadaEn: foto.tomadaEn },
+        datos: {
+          id: foto.fotoId,
+          obraId: obra.id,
+          partidaId,
+          tomadaEn: foto.tomadaEn,
+        },
         descripcion: descripcionFoto(partida),
         archivoLocal: archivo,
       });
       // Ya está en la cola: la siguiente foto es otro registro. La partida queda elegida.
       setFoto(null);
+      limpiar();
       if (op.estado === 'RECHAZADO') {
         setFallo(mensajeRechazo(op));
       } else {
@@ -107,12 +123,14 @@ export function useFotoAvance(obra: ObraPaquete) {
     } finally {
       setEnviando(false);
     }
-  }, [falta, partidaId, foto, obra, registrar]);
+  }, [falta, partidaId, foto, obra, registrar, limpiar]);
 
   return {
     partidaId,
     setPartidaId,
     foto,
+    /** Análisis de casco y chaleco de la foto (301): analizando, listo o fallo; `null` sin foto. */
+    analisisEpp: epp.estado,
     preparando,
     aviso,
     elegirFoto,
