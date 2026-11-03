@@ -18,6 +18,9 @@ Capa 3 (301, casco y chaleco en el celular): `react-native-fast-tflite` 3.0.1 (T
 
 Avisos *push* (010): `@react-native-firebase/app` y `@react-native-firebase/messaging` **26.4.0**, fijas (sin `^`) y siempre en la misma versión. Solo en la *development build* (no en Expo Go). Compatibilidad comprobada el 02/11/2026 (detalle y fuentes en `docs/specs/010-notificaciones/tareas.md`): la 26 exige la nueva arquitectura (la única de RN 0.88) y Android API 23+; la 27 no se usa porque pide Kotlin ≥ 2.4.0 y Expo SDK 58 compila con Kotlin 2.2.0. El permiso de Android 13+ se pide con `PermissionsAndroid` de React Native (lo que indica la documentación de React Native Firebase); no se agrega `expo-notifications`.
 
+- `app.config.js` (en JavaScript, para no sumar los tipos de Node al proyecto) toma `app.json` y, **solo si la variable `GOOGLE_SERVICES_JSON` apunta a un archivo que existe**, agrega `android.googleServicesFile`, el permiso `android.permission.POST_NOTIFICATIONS` y los *config plugins* `@react-native-firebase/app` y `@react-native-firebase/messaging`. Sin el archivo la configuración queda igual a `app.json`: la app compila y funciona sin avisos. `google-services.json` está en `.gitignore`. Comprobar con `npx expo config --type prebuild`.
+- Sin `google-services.json` (o en Expo Go) el módulo nativo no tiene la app de Firebase `[DEFAULT]`: `src/avisos/push.ts` carga `@react-native-firebase/*` recién al usarlos, dentro de `try`, y con `getApps()` vacío no hace nada.
+
 ## Tema
 
 `src/tema.ts`: `MD3LightTheme` de Paper extendido con los colores de `docs/diseno-visual.md` (primario `#0E4D5C`, secundario `#F08A24`, éxito `#1B7343`, atención `#9A4A00`, error `#B42318`, fondo `#F2F5F6`), `roundness` de 1,2 (botones de 6 px) y las constantes `radios.tarjeta` (10) y `radios.control` (6) para tarjetas, diálogos y campos, porque Paper deriva todos los radios de un solo valor. Inter con `expo-font`.

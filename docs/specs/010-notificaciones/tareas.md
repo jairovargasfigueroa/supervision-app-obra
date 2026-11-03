@@ -7,7 +7,7 @@ Los avisos *push* solo funcionan en una *development build* de Android (no en Ex
 Marca cada tarea al terminarla (con sus pruebas y su commit).
 
 - [x] Verificar `@react-native-firebase/app` y `messaging` con Expo SDK 58 (versiones, *config plugins*, temas); si no son compatibles, detenerse y proponer la alternativa del diseño
-- [ ] Aplicar «Cambios a contratos y datos» que tocan este proyecto (`docs/app.md`, `docs/contratos.md`); `google-services.json` fuera del repo y tomado de `GOOGLE_SERVICES_JSON`
+- [x] Aplicar «Cambios a contratos y datos» que tocan este proyecto (`docs/app.md`, `docs/contratos.md`); `google-services.json` fuera del repo y tomado de `GOOGLE_SERVICES_JSON`
 - [ ] `src/avisos/temas.ts` y `rutaDeAviso.ts` (funciones puras) con sus pruebas
 - [ ] `src/avisos/push.ts`: permiso, suscripción a los temas al cargar el paquete de datos, desuscripción al cerrar sesión; pruebas con `messaging` simulado
 - [ ] Abrir la pantalla al tocar el aviso y `Snackbar` con la app abierta; pruebas
