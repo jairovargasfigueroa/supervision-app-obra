@@ -19,7 +19,7 @@ const estado = {
   enPrimerPlano: new Set<Oyente>(),
   inicial: null as MensajeSimulado | null,
   manejadorFondo: null as ((mensaje: MensajeSimulado) => Promise<unknown>) | null,
-  permiso: { concedido: false, alPedir: true, pedidos: 0 },
+  permiso: { concedido: false, alPedir: true as boolean | 'falla', pedidos: 0 },
 };
 
 const MENSAJERIA = { app: { name: '[DEFAULT]' } };
@@ -78,10 +78,13 @@ export const moduloMensajeria = {
 
 export const moduloPermiso = {
   permisoConcedido: jest.fn(async () => estado.permiso.concedido),
-  pedirPermiso: jest.fn(async () => {
+  pedirPermiso: jest.fn(async (): Promise<'concedido' | 'negado' | 'no-se-pudo'> => {
     estado.permiso.pedidos += 1;
+    if (estado.permiso.alPedir === 'falla') {
+      return 'no-se-pudo';
+    }
     estado.permiso.concedido = estado.permiso.alPedir;
-    return estado.permiso.concedido;
+    return estado.permiso.concedido ? 'concedido' : 'negado';
   }),
 };
 
@@ -110,9 +113,9 @@ export function simularSinFirebase(): void {
 
 /**
  * Permiso de notificaciones: `concedido` es el estado actual (al empezar, todavía no se pidió) y
- * `alPedir`, lo que responde el usuario en el diálogo.
+ * `alPedir`, lo que responde el usuario en el diálogo (`'falla'`: el diálogo no se pudo mostrar).
  */
-export function simularPermiso(permiso: { concedido?: boolean; alPedir?: boolean }): void {
+export function simularPermiso(permiso: { concedido?: boolean; alPedir?: boolean | 'falla' }): void {
   Object.assign(estado.permiso, permiso);
 }
 

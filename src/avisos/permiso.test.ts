@@ -13,13 +13,13 @@ describe('permiso de notificaciones', () => {
     const pedir = jest
       .spyOn(PermissionsAndroid, 'request')
       .mockResolvedValue(PermissionsAndroid.RESULTS.GRANTED);
-    expect(await pedirPermiso(android13)).toBe(true);
+    expect(await pedirPermiso(android13)).toBe('concedido');
     expect(pedir).toHaveBeenCalledWith('android.permission.POST_NOTIFICATIONS');
 
     pedir.mockResolvedValue(PermissionsAndroid.RESULTS.DENIED);
-    expect(await pedirPermiso(android13)).toBe(false);
+    expect(await pedirPermiso(android13)).toBe('negado');
     pedir.mockResolvedValue(PermissionsAndroid.RESULTS.NEVER_ASK_AGAIN);
-    expect(await pedirPermiso({ os: 'android', version: 35 })).toBe(false);
+    expect(await pedirPermiso({ os: 'android', version: 35 })).toBe('negado');
   });
 
   it('en Android 13+ consulta el permiso sin preguntar', async () => {
@@ -33,21 +33,24 @@ describe('permiso de notificaciones', () => {
   it('antes de Android 13 no hace falta pedirlo', async () => {
     const pedir = jest.spyOn(PermissionsAndroid, 'request');
     const consultar = jest.spyOn(PermissionsAndroid, 'check');
-    expect(await pedirPermiso(android12)).toBe(true);
+    expect(await pedirPermiso(android12)).toBe('concedido');
     expect(await permisoConcedido(android12)).toBe(true);
     expect(pedir).not.toHaveBeenCalled();
     expect(consultar).not.toHaveBeenCalled();
   });
 
   it('fuera de Android, sin avisos', async () => {
-    expect(await pedirPermiso({ os: 'ios', version: '18.0' })).toBe(false);
+    expect(await pedirPermiso({ os: 'ios', version: '18.0' })).toBe('negado');
     expect(await permisoConcedido({ os: 'ios', version: '18.0' })).toBe(false);
   });
 
-  it('si el sistema falla, lo da por no concedido', async () => {
-    jest.spyOn(PermissionsAndroid, 'request').mockRejectedValue(new Error('sin actividad'));
+  it('si el diálogo no se pudo mostrar lo dice (para volver a pedirlo) y da el permiso por no concedido', async () => {
+    const pedir = jest.spyOn(PermissionsAndroid, 'request').mockRejectedValue(new Error('sin actividad'));
     jest.spyOn(PermissionsAndroid, 'check').mockRejectedValue(new Error('sin actividad'));
-    expect(await pedirPermiso(android13)).toBe(false);
+    expect(await pedirPermiso(android13)).toBe('no-se-pudo');
     expect(await permisoConcedido(android13)).toBe(false);
+    // Una respuesta que no es del diálogo (p. ej. sin actividad, la de React Native) tampoco cuenta.
+    pedir.mockResolvedValue('unavailable' as never);
+    expect(await pedirPermiso(android13)).toBe('no-se-pudo');
   });
 });

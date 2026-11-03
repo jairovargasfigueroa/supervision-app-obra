@@ -94,7 +94,7 @@ describe('actualizarAvisos', () => {
     expect(temasEnFirebase()).toEqual(['obra-o1-almacenero', 'obra-o1-maestro']);
   });
 
-  it('sin señal la suscripción falla: guarda solo lo que quedó y reintenta la próxima vez', async () => {
+  it('si FCM rechaza una suscripción: guarda solo lo que quedó y la reintenta la próxima vez', async () => {
     simularPermiso({ concedido: true });
     fallarTemas('obra-o2-maestro');
     await actualizarAvisos({ obras: dosObras, roles: maestro, conectado: false });
@@ -107,18 +107,58 @@ describe('actualizarAvisos', () => {
     expect(await temasGuardados()).toEqual(['obra-o1-maestro', 'obra-o2-maestro']);
   });
 
-  it('si FCM no contesta, no se queda esperando', async () => {
-    jest.useFakeTimers();
-    try {
+  describe('sin red FCM no contesta: la operación queda en su cola y se da por aplicada', () => {
+    const sinRespuesta = () => new Promise<void>(() => undefined);
+
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('no se queda esperando y guarda el tema suscrito', async () => {
       simularPermiso({ concedido: true });
-      moduloMensajeria.subscribeToTopic.mockImplementationOnce(() => new Promise<void>(() => undefined));
+      moduloMensajeria.subscribeToTopic.mockImplementationOnce(sinRespuesta);
       const resultado = actualizarAvisos({ obras: [{ id: 'o1' }], roles: maestro, conectado: false });
       await jest.advanceTimersByTimeAsync(ESPERA_TEMA_MS);
       expect(await resultado).toBe('activos');
+      expect(await temasGuardados()).toEqual(['obra-o1-maestro']);
+    });
+
+    it('cierra sesión sin señal y vuelve a entrar: se suscribe otra vez (la baja pendiente no lo deja sin avisos)', async () => {
+      await actualizarAvisos({ obras: [{ id: 'o1' }], roles: maestro, conectado: true });
+      moduloMensajeria.unsubscribeFromTopic.mockImplementationOnce(sinRespuesta);
+      const baja = quitarTodosLosTemas();
+      await jest.advanceTimersByTimeAsync(ESPERA_TEMA_MS);
+      await baja;
       expect(await temasGuardados()).toEqual([]);
-    } finally {
-      jest.useRealTimers();
-    }
+
+      moduloMensajeria.subscribeToTopic.mockClear();
+      await actualizarAvisos({ obras: [{ id: 'o1' }], roles: maestro, conectado: true });
+      // La suscripción va detrás de la baja pendiente en la cola de FCM: queda suscrito.
+      expect(moduloMensajeria.subscribeToTopic).toHaveBeenCalledWith(expect.anything(), 'obra-o1-maestro');
+      expect(await temasGuardados()).toEqual(['obra-o1-maestro']);
+    });
+
+    it('se suscribe sin señal y cierra sesión: la baja incluye ese tema', async () => {
+      simularPermiso({ concedido: true });
+      moduloMensajeria.subscribeToTopic.mockImplementationOnce(sinRespuesta);
+      const alta = actualizarAvisos({ obras: [{ id: 'o1' }], roles: almacenero, conectado: false });
+      await jest.advanceTimersByTimeAsync(ESPERA_TEMA_MS);
+      await alta;
+
+      await quitarTodosLosTemas();
+      expect(moduloMensajeria.unsubscribeFromTopic).toHaveBeenCalledWith(expect.anything(), 'obra-o1-almacenero');
+      expect(await temasGuardados()).toEqual([]);
+    });
+  });
+
+  it('si el diálogo del permiso no se pudo mostrar, lo vuelve a pedir en la próxima actualización', async () => {
+    simularPermiso({ alPedir: 'falla' });
+    expect(await actualizarAvisos({ obras: dosObras, roles: maestro, conectado: true })).toBe('sin-permiso');
+    expect(contenidoSecureStore()['avisos.permiso-pedido']).toBeUndefined();
+
+    simularPermiso({ alPedir: true });
+    expect(await actualizarAvisos({ obras: dosObras, roles: maestro, conectado: true })).toBe('activos');
+    expect(vecesQueSePidioPermiso()).toBe(2);
+    expect(contenidoSecureStore()['avisos.permiso-pedido']).toBe('si');
   });
 
   it('sin Firebase (sin google-services.json o en Expo Go) no hace nada', async () => {
@@ -139,7 +179,7 @@ describe('quitarTodosLosTemas', () => {
     expect(moduloMensajeria.unsubscribeFromTopic).toHaveBeenCalledTimes(4);
   });
 
-  it('sin red, los que no se quitaron quedan guardados y se quitan al entrar otro usuario', async () => {
+  it('si FCM rechaza las bajas, quedan guardadas y se quitan al entrar otro usuario', async () => {
     await actualizarAvisos({ obras: dosObras, roles: almacenero, conectado: true });
     fallarTemas();
     await quitarTodosLosTemas();

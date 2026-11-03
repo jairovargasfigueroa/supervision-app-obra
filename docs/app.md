@@ -26,6 +26,7 @@ No es una pantalla: avisos *push* de Firebase Cloud Messaging que envía n8n, si
 - La app recibe los avisos de sus obras asignadas (las del paquete de datos de la 101): se suscribe a los temas `obra-{obraId}-almacenero` u `obra-{obraId}-maestro` según su rol, deja los de una obra que ya no tiene al actualizar los datos y todos al cerrar sesión.
 - Con la app abierta, el aviso se muestra como mensaje breve (`Snackbar`) con «Ver», que abre la misma pantalla.
 - Solo en la *development build* y la versión instalable de Android compiladas con `google-services.json` (no en Expo Go ni en iOS).
+- Limitación conocida: el paquete de datos (101) no dice con qué rol está asignado el usuario en cada obra, así que un usuario con los roles `maestro` y `almacenero` se suscribe a los dos temas de todas sus obras y puede recibir el aviso de stock bajo o del diario de una obra donde solo tiene uno de los dos papeles. Se acepta: los avisos no tienen datos sensibles y la pantalla que abren sigue protegida por rol.
 
 ### Pendientes de envío (101)
 

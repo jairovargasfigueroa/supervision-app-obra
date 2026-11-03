@@ -21,7 +21,10 @@ export type Firebase = {
 const CLAVE_TEMAS = 'avisos.temas';
 const CLAVE_PERMISO_PEDIDO = 'avisos.permiso-pedido';
 
-/** Cuánto se espera a FCM por cada suscripción o baja (sin red puede no contestar). */
+/**
+ * Cuánto se espera a FCM por cada suscripción o baja. Sin red no contesta hasta que vuelve la red;
+ * pasado este tiempo la operación se da por aplicada (queda en la cola persistente del SDK).
+ */
 export const ESPERA_TEMA_MS = 10_000;
 
 let cargado: Firebase | null | undefined;
@@ -86,17 +89,30 @@ async function guardarTemas(temas: readonly string[]): Promise<void> {
   }
 }
 
-function conLimite(promesa: Promise<void>, ms: number): Promise<void> {
+/**
+ * Espera la operación de FCM hasta `ms`. Si contesta, `'hecho'`; si la rechaza (error real del SDK),
+ * `'rechazado'`; si no contesta a tiempo (sin red), `'en-espera'`: en Android el SDK de FCM guarda las
+ * suscripciones y bajas pendientes en una cola persistente y las ejecuta en orden al volver la red.
+ */
+function esperarOperacion(promesa: Promise<void>, ms: number): Promise<'hecho' | 'rechazado' | 'en-espera'> {
   let temporizador: ReturnType<typeof setTimeout> | undefined;
-  const plazo = new Promise<never>((_, rechazar) => {
-    temporizador = setTimeout(() => rechazar(new Error('FCM no respondió a tiempo')), ms);
+  const plazo = new Promise<'en-espera'>((listo) => {
+    temporizador = setTimeout(() => listo('en-espera'), ms);
   });
-  return Promise.race([promesa, plazo]).finally(() => clearTimeout(temporizador));
+  return Promise.race([
+    promesa.then(
+      () => 'hecho' as const,
+      () => 'rechazado' as const,
+    ),
+    plazo,
+  ]).finally(() => clearTimeout(temporizador));
 }
 
 /**
  * Deja el celular suscrito exactamente a `nuevos` (con `cambiosDeTemas` respecto de los guardados) y
- * guarda lo que quedó. Lo que falla (sin red) queda como estaba y se reintenta la próxima vez.
+ * guarda lo que quedó. Una operación que FCM no contestó a tiempo se da por aplicada (la cola nativa
+ * de FCM la ejecutará en orden al volver la red), así lo guardado coincide con lo que terminará pasando;
+ * solo un rechazo real deja el tema como estaba, para reintentarlo la próxima vez.
  */
 async function aplicarTemas(fb: Firebase, nuevos: readonly string[]): Promise<string[]> {
   const actuales = await temasGuardados();
@@ -105,17 +121,19 @@ async function aplicarTemas(fb: Firebase, nuevos: readonly string[]): Promise<st
     return actuales;
   }
   const vigentes = new Set(actuales);
-  await Promise.allSettled([
-    ...quitar.map((tema) =>
-      conLimite(fb.modulo.unsubscribeFromTopic(fb.mensajeria, tema), ESPERA_TEMA_MS).then(() =>
-        vigentes.delete(tema),
-      ),
-    ),
-    ...suscribir.map((tema) =>
-      conLimite(fb.modulo.subscribeToTopic(fb.mensajeria, tema), ESPERA_TEMA_MS).then(() =>
-        vigentes.add(tema),
-      ),
-    ),
+  await Promise.all([
+    ...quitar.map(async (tema) => {
+      const resultado = await esperarOperacion(fb.modulo.unsubscribeFromTopic(fb.mensajeria, tema), ESPERA_TEMA_MS);
+      if (resultado !== 'rechazado') {
+        vigentes.delete(tema);
+      }
+    }),
+    ...suscribir.map(async (tema) => {
+      const resultado = await esperarOperacion(fb.modulo.subscribeToTopic(fb.mensajeria, tema), ESPERA_TEMA_MS);
+      if (resultado !== 'rechazado') {
+        vigentes.add(tema);
+      }
+    }),
   ]);
   const resultado = [...vigentes].sort();
   await guardarTemas(resultado);
@@ -145,8 +163,11 @@ export function actualizarAvisos({ obras, roles, conectado }: Datos): Promise<Es
       return 'sin-firebase';
     }
     if (conectado && !(await SecureStore.getItemAsync(CLAVE_PERMISO_PEDIDO))) {
-      await SecureStore.setItemAsync(CLAVE_PERMISO_PEDIDO, 'si');
-      await pedirPermiso();
+      // La marca se guarda solo si el diálogo se mostró y el usuario respondió; si no se pudo mostrar
+      // (p. ej. sin actividad en primer plano), se vuelve a pedir en la próxima actualización.
+      if ((await pedirPermiso()) !== 'no-se-pudo') {
+        await SecureStore.setItemAsync(CLAVE_PERMISO_PEDIDO, 'si');
+      }
     }
     const permitido = await permisoConcedido();
     await aplicarTemas(fb, permitido ? temasDe(obras, roles) : []);
@@ -155,8 +176,9 @@ export function actualizarAvisos({ obras, roles, conectado }: Datos): Promise<Es
 }
 
 /**
- * Al cerrar sesión (o si la sesión vence): baja de todos los temas. Sin red, los que no se pudieron
- * quitar quedan guardados y se quitan al próximo inicio de sesión (si no son del nuevo usuario).
+ * Al cerrar sesión (o si la sesión vence): baja de todos los temas. Sin red, FCM las deja en su cola y
+ * las ejecuta al volver la red; solo las que FCM rechaza quedan guardadas y se quitan al próximo inicio
+ * de sesión (si no son del nuevo usuario).
  */
 export function quitarTodosLosTemas(): Promise<void> {
   return enCola(async () => {
