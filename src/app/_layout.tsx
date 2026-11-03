@@ -6,12 +6,16 @@ import { useEffect, useState } from 'react';
 import { PaperProvider } from 'react-native-paper';
 
 import { crearClienteConsultas } from '../api/cliente';
+import { prepararAvisosEnSegundoPlano } from '../avisos/push';
 import { tieneAccesoApp } from '../sesion/roles';
 import { SesionProvider, useSesion } from '../sesion/sesion';
 import { colores, fuentesInter, tema, temaSistema } from '../tema';
 
 // La pantalla de bienvenida queda hasta que cargan la fuente y la sesión guardada.
 void SplashScreen.preventAutoHideAsync().catch(() => {});
+
+// Avisos push (010): manejador de los mensajes con la app en segundo plano, lo antes posible.
+prepararAvisosEnSegundoPlano();
 
 // Colores de la navegación (pestañas y fondo de las pantallas) iguales a los del tema de Paper.
 const temaNavegacion: Theme = {

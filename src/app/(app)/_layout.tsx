@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import { useMemo } from 'react';
 
+import { AvisosPush } from '../../avisos/AvisosPush';
 import { EncabezadoApp } from '../../componentes/EncabezadoApp';
 import { PANTALLAS_OBRA, tieneAlgunRol } from '../../sesion/roles';
 import { useSesion } from '../../sesion/sesion';
@@ -12,7 +13,7 @@ export const unstable_settings = { initialRouteName: '(pestanas)' };
 // Barra superior con el nombre y el rol (001, criterio 11) sobre las pestañas `(pestanas)` y sobre
 // las pantallas de una obra (`obras/[id]/…`), que se apilan encima de las pestañas con «atrás».
 // Cada pantalla de obra solo existe para su rol (Stack.Protected). Con la sesión abierta corre la
-// sincronización de la cola (101) del usuario.
+// sincronización de la cola (101) del usuario y, con ella, los avisos push (010).
 export default function AppLayout() {
   const { sesion, obtenerToken } = useSesion();
   const usuario = sesion.estado === 'activa' ? sesion.usuario : null;
@@ -45,6 +46,7 @@ export default function AppLayout() {
   return (
     <SincronizacionProvider key={usuarioSync.id} usuario={usuarioSync} obtenerToken={obtenerToken}>
       {pila}
+      <AvisosPush />
     </SincronizacionProvider>
   );
 }

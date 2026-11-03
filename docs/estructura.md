@@ -96,12 +96,17 @@ src/
                    deteccion.ts (funciones puras), config.ts (epp.json), modelos.ts (carga con react-native-fast-tflite),
                    imagen.ts (píxeles con expo-image-manipulator + jpeg-js), analisis.ts (analizarFoto, 5 s),
                    mensajes.ts, useAnalisisEpp.ts (estado en la pantalla)
+  avisos/          (010) avisos push: temas.ts (temasDe y cambiosDeTemas, puras), rutaDeAviso.ts (pura),
+                   permiso.ts (POST_NOTIFICATIONS con PermissionsAndroid), push.ts (Firebase cargado al usarlo,
+                   permiso, temas guardados en secure-store, baja de todos), AvisosPush.tsx (suscripción con
+                   cada cambio del paquete; abrir la pantalla del aviso y Snackbar con la app abierta)
   nucleo/          formato.ts, clima.ts (103), uuid.ts, configuracion.ts (lee extra de app.json, validado con Zod),
                    estado-stock.ts (estado del stock → etiqueta y tono del chip)
   pruebas/         ayudas de prueba: jwt.ts (tokens falsos), secure-store-simulado.ts, fetch-simulado.ts (red),
                    sqlite-simulado.ts (expo-sqlite sobre node:sqlite en memoria), archivos-simulados.ts
                    (expo-file-system en memoria), imagen-simulada.ts (cámara, galería y compresión),
-                   epp-simulado.ts (modelos y foto simulados del análisis de casco y chaleco, 301)
+                   epp-simulado.ts (modelos y foto simulados del análisis de casco y chaleco, 301),
+                   firebase-simulado.ts (@react-native-firebase/app y messaging y el permiso de notificaciones, 010)
   tema.ts
 ```
 
@@ -201,3 +206,14 @@ src/
 - Pruebas (control de seguridad): en `rutas.test.tsx`, el maestro lo abre desde «Mis obras» y el almacenero no; resumen, aviso y recuadros sin «Enviar», nada en la cola ni en la red, «Otro control» y otra foto, análisis fallido y el archivo borrado con «Otro control»; `roles.test.ts`.
 - **Envío** (criterios 6, 8 y 9): con la capa 1 la app no llama a Obras; la detección va en `datos` de la operación `FOTO_AVANCE` de la cola (102): `{ id, obraId, partidaId, tomadaEn, deteccion? }`, con `deteccion = { personas, sinCasco, sinChaleco, versionModelo }` (`deteccionParaEnvio`: sin las cajas). Va siempre que el análisis terminó, también con 0 personas; si falló o se pasó de 5 s, `datos` no lleva `deteccion`. Si se pulsa «Enviar» mientras se analiza, `enviar` espera el resultado de esa foto (`resultadoDe(fotoId)`, como mucho 5 s). Como queda en `datos` de la fila de la cola, los reintentos usan el mismo `fotoId` y la misma detección sin volver a analizar; el subidor agrega `claveArchivo` sin tocar el resto y Sincronización la reenvía tal cual a `POST /obras/{obraId}/fotos`.
 - Pruebas (envío): en `rutas.test.tsx`, `deteccion` en `datos` de la cola, «Enviar» durante el análisis, sin `deteccion` si falló, y en el lote que llega a Sincronización con la `claveArchivo`; en `sync/subidor.test.ts`, la detección sigue en `datos` tras un reintento de la subida.
+
+## Avisos push (010)
+
+- **Temas** (`avisos/temas.ts`): `temasDe(obras, roles)` da `obra-{obraId}-almacenero` con el rol `almacenero` y `obra-{obraId}-maestro` con `maestro` (con los dos roles, ambos; decisión de implementación: el diseño la escribe con un solo `rol`, pero un usuario puede tener los dos), sin repetir y omitiendo un id que no sirva como nombre de tema de FCM (`[a-zA-Z0-9-_.~%]`). `cambiosDeTemas(actuales, nuevos)` → `{ suscribir, quitar }`.
+- **Suscripción** (`avisos/push.ts`, `actualizarAvisos`): `AvisosPush` (montado dentro de `SincronizacionProvider` en `(app)/_layout.tsx`) la llama con cada cambio de las obras del paquete guardado (descarga, «Actualizar datos», tirar para actualizar), de los roles o de la señal; sin paquete guardado no toca nada. La primera vez que hay señal pide el permiso (una sola vez en el celular: `avisos.permiso-pedido` en secure-store); después consulta el permiso cada vez: concedido → los temas de `temasDe`; negado o quitado en los ajustes → ninguno (se da de baja de los que tenía). Los temas suscritos se guardan en `avisos.temas` (secure-store, JSON) y son del celular, no del usuario: al entrar otro usuario, `cambiosDeTemas` quita los que no le corresponden.
+- **Baja** (`quitarTodosLosTemas`): al terminar la sesión (cerrar sesión o sesión vencida, `terminar` de `sesion.tsx`), sin esperar a FCM para salir.
+- Las operaciones con los temas van de a una (cola de promesas) y cada llamada a FCM tiene 10 s como máximo (sin red puede no contestar). Lo que falla queda como estaba en `avisos.temas` y se reintenta en la siguiente actualización.
+- **Sin Firebase** (`firebase()`): `@react-native-firebase/app` y `messaging` se cargan con `require` al usarlos, dentro de `try`; en Expo Go (sin módulo nativo) o sin `google-services.json` (`getApps()` vacío) no se pide permiso ni se suscribe nada, y la app funciona igual.
+- **Permiso** (`avisos/permiso.ts`): Android 13+ → `PermissionsAndroid.request` / `check` de `POST_NOTIFICATIONS`; antes de Android 13, concedido; fuera de Android, sin avisos.
+- `prepararAvisosEnSegundoPlano()` (en `src/app/_layout.tsx`, al cargar) registra un `setBackgroundMessageHandler` vacío: Android muestra solo la notificación (el mensaje trae `notification`); sin manejador React Native Firebase avisa en el registro.
+- Pruebas: `avisos/temas.test.ts`, `rutaDeAviso.test.ts`, `permiso.test.ts` (el real, con `PermissionsAndroid` espiado), `push.test.ts` (con Firebase simulado: permiso una vez, sin señal, negado, concedido después, quitado, cambio de obras, fallos y reintento, FCM que no contesta, sin Firebase, baja de todos) y en `rutas.test.tsx` (suscripción al entrar, con los dos roles, al actualizar los datos, permiso negado, cerrar sesión, sin Firebase). En Jest, `@react-native-firebase/app`, `@react-native-firebase/messaging` y `avisos/permiso.ts` se reemplazan por `src/pruebas/firebase-simulado.ts` (Firebase configurado y permiso sin pedir que se concede al pedirlo).

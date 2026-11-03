@@ -13,6 +13,12 @@ import { guardarTokens, leerTokens } from './sesion/tokens';
 import type { PaqueteDatos } from './api/sincronizacion';
 import { agregar, listar, marcarRechazada, obtener, tomarParaEnvio } from './sync/cola';
 import { guardarPaquete, leerPaquete } from './sync/paquete';
+import {
+  simularPermiso,
+  simularSinFirebase,
+  temasEnFirebase,
+  vecesQueSePidioPermiso,
+} from './pruebas/firebase-simulado';
 import { llamadas as llamadasEpp, simularAnalisisEpp, type PersonaSimulada } from './pruebas/epp-simulado';
 
 // Las pruebas de navegación usan las rutas reales de src/app; Keycloak está simulado.
@@ -1240,5 +1246,62 @@ describe('diario de obra (103)', () => {
     await renderRouter('src/app', { initialUrl: '/obras/o1/diario' });
     await screen.findAllByText('Stock');
     expect(screen).not.toHavePathname('/obras/o1/diario');
+  });
+});
+
+describe('avisos push: suscripción a los temas (010, criterios 7 y 8)', () => {
+  beforeEach(() => {
+    obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([OBRA_PAQUETE]));
+  });
+
+  it('al entrar con señal pide el permiso y suscribe el celular a los temas de sus obras', async () => {
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await waitFor(() => expect(temasEnFirebase()).toEqual(['obra-o1-almacenero']));
+    expect(vecesQueSePidioPermiso()).toBe(1);
+  });
+
+  it('el maestro recibe los de maestro; con los dos roles, ambos', async () => {
+    await entrarCon(['maestro', 'almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await waitFor(() => expect(temasEnFirebase()).toEqual(['obra-o1-almacenero', 'obra-o1-maestro']));
+  });
+
+  it('al actualizar los datos deja la obra que ya no tiene y suscribe la nueva', async () => {
+    await entrarCon(['almacenero']);
+    await waitFor(() => expect(temasEnFirebase()).toEqual(['obra-o1-almacenero']));
+    await guardarPaquete(
+      'id-usuario1',
+      paqueteDe([{ ...OBRA_PAQUETE, id: 'o2', nombre: 'Condominio El Bosque' }], [], 'v2') as PaqueteDatos,
+      '2026-11-15T14:00:00Z',
+    );
+    expect(await screen.findByText('Condominio El Bosque')).toBeTruthy();
+    await waitFor(() => expect(temasEnFirebase()).toEqual(['obra-o2-almacenero']));
+  });
+
+  it('si niega el permiso la app funciona igual, sin avisos', async () => {
+    simularPermiso({ alPedir: false });
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await waitFor(() => expect(vecesQueSePidioPermiso()).toBe(1));
+    expect(temasEnFirebase()).toEqual([]);
+    await fireEvent.press(screen.getByLabelText('Stock: Edificio Las Palmas'));
+    await waitFor(() => expect(screen).toHavePathname('/obras/o1/stock'));
+  });
+
+  it('al cerrar sesión se da de baja de todos', async () => {
+    await entrarCon(['maestro']);
+    await waitFor(() => expect(temasEnFirebase()).toEqual(['obra-o1-maestro']));
+    await fireEvent.press(await screen.findByLabelText('Cerrar sesión'));
+    expect(await screen.findByText('Iniciar sesión')).toBeTruthy();
+    await waitFor(() => expect(temasEnFirebase()).toEqual([]));
+  });
+
+  it('sin Firebase en la compilación la app funciona igual y no pide el permiso', async () => {
+    simularSinFirebase();
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    expect(vecesQueSePidioPermiso()).toBe(0);
+    expect(temasEnFirebase()).toEqual([]);
   });
 });

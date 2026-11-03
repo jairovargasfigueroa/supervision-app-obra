@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from 'react';
 
+import { quitarTodosLosTemas } from '../avisos/push';
 import { cerrarSesionKeycloak, iniciarSesionKeycloak, renovarTokens } from './keycloak';
 import { asegurarVigencia, msHastaRenovar } from './renovacion';
 import { usuarioDelToken, type Usuario } from './token';
@@ -82,6 +83,8 @@ export function SesionProvider({ children }: { children: ReactNode }) {
     setVenceEn(null);
     await borrarTokens();
     await borrarUsuarioLocal();
+    // 010 (criterio 8): sin sesión no llegan avisos. No se espera a FCM para salir.
+    quitarTodosLosTemas().catch(() => undefined);
     setSesion({ estado: 'sin-sesion', motivo });
   }, []);
 
