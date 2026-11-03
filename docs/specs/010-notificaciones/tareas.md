@@ -1,14 +1,23 @@
-# 010 · Notificaciones · tareas de `mobile/app-obra`
+# 010 · Avisos al celular y al cliente · tareas de `mobile/app-obra`
 
-Requisitos y diseño: `docs/specs/010-notificaciones/` de la carpeta que agrupa los proyectos. Contratos: `docs/contratos.md` de este proyecto.
+Requisitos y diseño: `docs/specs/010-notificaciones/` de la carpeta que agrupa los proyectos (repo `supervision-docs`). Estas tareas reemplazan a las de la versión anterior (bandeja, `expo-notifications` y `services/notificaciones`). Contratos: `docs/contratos.md` de este proyecto.
 
-Los avisos *push* solo se prueban en una *development build* de Android (no en Expo Go). La bandeja se prueba en cualquiera.
+Los avisos *push* solo funcionan en una *development build* de Android (no en Expo Go), como la 301.
 
 Marca cada tarea al terminarla (con sus pruebas y su commit).
 
-- [ ] `npx expo install expo-notifications expo-constants`; pasar `app.json` a `app.config.ts` con `android.package` (`bo.supervision.appobra` salvo que la 301 haya fijado otro), `googleServicesFile` solo si existe el archivo o `GOOGLE_SERVICES_JSON`, plugin `expo-notifications` (color y canal `avisos`) y `extra.notificacionesUrl`; `google-services.json` en `.gitignore`
-- [ ] `src/notificaciones/api.ts` (contador, lista paginada, marcar una y todas) y `rutas-notificacion.ts`; pruebas
-- [ ] Pestaña «Avisos» con `Badge` («9+»), lista, «Ver más», *pull to refresh*, «Marcar todas como leídas», sin señal, vacío y error
-- [ ] `src/notificaciones/push.ts`: canal `avisos`, `setNotificationHandler` sin aviso en primer plano (*snackbar* y contador), Expo Go → sin *push*, permiso una sola vez, `getDevicePushTokenAsync` → `POST /dispositivos`, `addPushTokenListener`, fallo sin `google-services.json` registrado en el log; pruebas con `expo-notifications` simulado
-- [ ] Toque en la notificación (con la app abierta y cerrada): marcar leída y navegar con `rutaDeNotificacion` o a «Avisos»; baja del dispositivo al cerrar sesión con 2 s máximo
-- [ ] Pruebas de la spec; README con cómo crear la *development build* con `google-services.json`
+- [x] Verificar `@react-native-firebase/app` y `messaging` con Expo SDK 58 (versiones, *config plugins*, temas); si no son compatibles, detenerse y proponer la alternativa del diseño
+- [ ] Aplicar «Cambios a contratos y datos» que tocan este proyecto (`docs/app.md`, `docs/contratos.md`); `google-services.json` fuera del repo y tomado de `GOOGLE_SERVICES_JSON`
+- [ ] `src/avisos/temas.ts` y `rutaDeAviso.ts` (funciones puras) con sus pruebas
+- [ ] `src/avisos/push.ts`: permiso, suscripción a los temas al cargar el paquete de datos, desuscripción al cerrar sesión; pruebas con `messaging` simulado
+- [ ] Abrir la pantalla al tocar el aviso y `Snackbar` con la app abierta; pruebas
+- [ ] Prueba manual en un Android con la *development build* (Jairo)
+
+## Verificación de compatibilidad (02/11/2026)
+
+- **Versiones:** `@react-native-firebase/app` y `@react-native-firebase/messaging` **26.4.0** (publicadas el 05/09/2026), fijas y sin `^` (las dos tienen que ir en la misma versión: `messaging` declara `@react-native-firebase/app` `26.4.0` como dependencia par). Instaladas con `npx expo install …@26.4.0 -- --save-exact`. No se usó la 27: la 27.1.0 y la 26.4.1 tienen menos de dos semanas (23/10/2026) y la 27.0.0 (19/10/2026) usa el BoM 35 de Firebase para Android, que pide el *plugin* de Kotlin ≥ 2.4.0 (`docs/platforms.mdx` y `docs/migrating-to-v27.mdx` del repo de React Native Firebase), mientras que Expo SDK 58 y React Native 0.88 compilan con Kotlin 2.2.0 (`expo-modules-autolinking`, `KotlinVersions.kt`; `@react-native/gradle-plugin`, `libs.versions.toml`).
+- **Requisitos de la 26.4.0** (`docs/platforms.mdx` en la etiqueta `v26.4.0`, `packages/app/package.json` → `sdkVersions`): Android 6.0 (API 23) o posterior (la app ya pide 24), JDK 17 o posterior, BoM de Firebase Android 34.18.0. Desde la 26 todos los módulos con código nativo son TurboModules y **exigen la nueva arquitectura** (`docs/migrating-to-v26.mdx`), que es la única de React Native 0.88. Dependencias pares: `expo >= 47`, `react-native *`.
+- **Expo:** «Integration with Expo is possible when using a development build» y no funciona en Expo Go (https://rnfirebase.io, sección «Installation for Expo projects»; https://docs.expo.dev/guides/using-firebase/). Se configura con los *config plugins* de cada paquete (`app.plugin.js` en `@react-native-firebase/app` y en `@react-native-firebase/messaging`) y `expo.android.googleServicesFile`. El de `app` agrega el *plugin* `google-services` de Gradle y copia el `google-services.json`; el de `messaging`, la configuración de la notificación de Android.
+- **Temas:** `subscribeToTopic(messaging, tema)` y `unsubscribeFromTopic(messaging, tema)` de la API modular (https://rnfirebase.io/messaging/usage, «Topics»; `dist/typescript/lib/index.d.ts` de la 26.4.0). El nombre del tema no lleva `/`; hasta 2000 temas por instalación.
+- **Permiso en Android 13+:** `requestPermission` de `messaging` está en desuso y no pide nada en Android; la documentación indica pedir `POST_NOTIFICATIONS` con `PermissionsAndroid` de React Native.
+- **Abrir la pantalla:** `getInitialNotification` (app cerrada) y `onNotificationOpenedApp` (en segundo plano); con la app abierta, `onMessage` (Android no muestra la notificación).

@@ -16,6 +16,8 @@ Capa 3 (301, casco y chaleco en el celular): `react-native-fast-tflite` 3.0.1 (T
 - Carpetas nativas: `android/` e `ios/` se regeneran con `npx expo prebuild` (*Continuous Native Generation*, lo que recomienda Expo) y están en `.gitignore`; no se versionan ni se editan a mano. Lo nativo se configura en `app.json` y con *config plugins*.
 - Con `expo-dev-client` instalado, `npm start` abre la *development build* por defecto; para seguir usando Expo Go en lo que no es la 301, pulsar `s` en Metro («switch to Expo Go»). En Expo Go el análisis dice «No se pudo analizar la foto» (la librería se carga recién al analizar, así el resto de la app funciona).
 
+Avisos *push* (010): `@react-native-firebase/app` y `@react-native-firebase/messaging` **26.4.0**, fijas (sin `^`) y siempre en la misma versión. Solo en la *development build* (no en Expo Go). Compatibilidad comprobada el 02/11/2026 (detalle y fuentes en `docs/specs/010-notificaciones/tareas.md`): la 26 exige la nueva arquitectura (la única de RN 0.88) y Android API 23+; la 27 no se usa porque pide Kotlin ≥ 2.4.0 y Expo SDK 58 compila con Kotlin 2.2.0. El permiso de Android 13+ se pide con `PermissionsAndroid` de React Native (lo que indica la documentación de React Native Firebase); no se agrega `expo-notifications`.
+
 ## Tema
 
 `src/tema.ts`: `MD3LightTheme` de Paper extendido con los colores de `docs/diseno-visual.md` (primario `#0E4D5C`, secundario `#F08A24`, éxito `#1B7343`, atención `#9A4A00`, error `#B42318`, fondo `#F2F5F6`), `roundness` de 1,2 (botones de 6 px) y las constantes `radios.tarjeta` (10) y `radios.control` (6) para tarjetas, diálogos y campos, porque Paper deriva todos los radios de un solo valor. Inter con `expo-font`.
