@@ -1,4 +1,4 @@
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 import * as ImagePicker from 'expo-image-picker';
 
@@ -13,6 +13,15 @@ import { guardarTokens, leerTokens } from './sesion/tokens';
 import type { PaqueteDatos } from './api/sincronizacion';
 import { agregar, listar, marcarRechazada, obtener, tomarParaEnvio } from './sync/cola';
 import { guardarPaquete, leerPaquete } from './sync/paquete';
+import {
+  abrirDesdeNotificacion,
+  recibirEnPrimerPlano,
+  simularPermiso,
+  simularSinFirebase,
+  temasEnFirebase,
+  tocarNotificacion,
+  vecesQueSePidioPermiso,
+} from './pruebas/firebase-simulado';
 import { llamadas as llamadasEpp, simularAnalisisEpp, type PersonaSimulada } from './pruebas/epp-simulado';
 
 // Las pruebas de navegación usan las rutas reales de src/app; Keycloak está simulado.
@@ -1240,5 +1249,119 @@ describe('diario de obra (103)', () => {
     await renderRouter('src/app', { initialUrl: '/obras/o1/diario' });
     await screen.findAllByText('Stock');
     expect(screen).not.toHavePathname('/obras/o1/diario');
+  });
+});
+
+describe('avisos push: suscripción a los temas (010, criterios 7 y 8)', () => {
+  beforeEach(() => {
+    obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([OBRA_PAQUETE]));
+  });
+
+  it('al entrar con señal pide el permiso y suscribe el celular a los temas de sus obras', async () => {
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await waitFor(() => expect(temasEnFirebase()).toEqual(['obra-o1-almacenero']));
+    expect(vecesQueSePidioPermiso()).toBe(1);
+  });
+
+  it('el maestro recibe los de maestro; con los dos roles, ambos', async () => {
+    await entrarCon(['maestro', 'almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await waitFor(() => expect(temasEnFirebase()).toEqual(['obra-o1-almacenero', 'obra-o1-maestro']));
+  });
+
+  it('al actualizar los datos deja la obra que ya no tiene y suscribe la nueva', async () => {
+    await entrarCon(['almacenero']);
+    await waitFor(() => expect(temasEnFirebase()).toEqual(['obra-o1-almacenero']));
+    await guardarPaquete(
+      'id-usuario1',
+      paqueteDe([{ ...OBRA_PAQUETE, id: 'o2', nombre: 'Condominio El Bosque' }], [], 'v2') as PaqueteDatos,
+      '2026-11-15T14:00:00Z',
+    );
+    expect(await screen.findByText('Condominio El Bosque')).toBeTruthy();
+    await waitFor(() => expect(temasEnFirebase()).toEqual(['obra-o2-almacenero']));
+  });
+
+  it('si niega el permiso la app funciona igual, sin avisos', async () => {
+    simularPermiso({ alPedir: false });
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await waitFor(() => expect(vecesQueSePidioPermiso()).toBe(1));
+    expect(temasEnFirebase()).toEqual([]);
+    await fireEvent.press(screen.getByLabelText('Stock: Edificio Las Palmas'));
+    await waitFor(() => expect(screen).toHavePathname('/obras/o1/stock'));
+  });
+
+  it('al cerrar sesión se da de baja de todos', async () => {
+    await entrarCon(['maestro']);
+    await waitFor(() => expect(temasEnFirebase()).toEqual(['obra-o1-maestro']));
+    await fireEvent.press(await screen.findByLabelText('Cerrar sesión'));
+    expect(await screen.findByText('Iniciar sesión')).toBeTruthy();
+    await waitFor(() => expect(temasEnFirebase()).toEqual([]));
+  });
+
+  it('sin Firebase en la compilación la app funciona igual y no pide el permiso', async () => {
+    simularSinFirebase();
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    expect(vecesQueSePidioPermiso()).toBe(0);
+    expect(temasEnFirebase()).toEqual([]);
+  });
+});
+
+describe('avisos push: abrir la pantalla del aviso (010, criterios 3, 5 y 9)', () => {
+  const stockBajo = {
+    notification: { title: 'Stock bajo: Cemento IP-30', body: 'Edificio Las Palmas: quedan 40 bolsas (mínimo 100)' },
+    data: { tipo: 'STOCK_BAJO', obraId: 'o1' },
+  };
+  const diario = {
+    notification: {
+      title: 'Diario pendiente: Edificio Las Palmas',
+      body: 'Todavía no registraste el diario de hoy. Si ya lo registraste sin señal, se enviará al volver la señal.',
+    },
+    data: { tipo: 'DIARIO', obraId: 'o1' },
+  };
+
+  beforeEach(() => {
+    obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([OBRA_PAQUETE]));
+  });
+
+  it('el almacenero toca el aviso de stock bajo con la app en segundo plano → abre el stock de la obra', async () => {
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await act(() => tocarNotificacion(stockBajo));
+    await waitFor(() => expect(screen).toHavePathname('/obras/o1/stock'));
+    expect(
+      await screen.findByText('Esta obra todavía no tiene materiales con movimientos ni mínimo definido.'),
+    ).toBeTruthy();
+  });
+
+  it('el maestro abre la app cerrada desde el aviso del diario → abre el diario de la obra', async () => {
+    abrirDesdeNotificacion(diario);
+    await entrarCon(['maestro']);
+    await waitFor(() => expect(screen).toHavePathname('/obras/o1/diario'));
+    expect(await screen.findByText('Guardar entrada')).toBeTruthy();
+  });
+
+  it('con la app abierta muestra el aviso con «Ver», que abre la pantalla', async () => {
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await act(() => recibirEnPrimerPlano(stockBajo));
+    expect(
+      await screen.findByText('Stock bajo: Cemento IP-30\nEdificio Las Palmas: quedan 40 bolsas (mínimo 100)'),
+    ).toBeTruthy();
+    expect(screen).toHavePathname('/obras');
+    await fireEvent.press(screen.getByText('Ver'));
+    await waitFor(() => expect(screen).toHavePathname('/obras/o1/stock'));
+  });
+
+  it('un aviso sin pantalla conocida se muestra sin «Ver» y no navega', async () => {
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await act(() => recibirEnPrimerPlano({ notification: { title: 'Aviso' }, data: { tipo: 'OTRO', obraId: 'o1' } }));
+    expect(await screen.findByText('Aviso')).toBeTruthy();
+    expect(screen.queryByText('Ver')).toBeNull();
+    await act(() => tocarNotificacion({ data: { tipo: 'OTRO', obraId: 'o1' } }));
+    expect(screen).toHavePathname('/obras');
   });
 });

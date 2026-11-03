@@ -63,7 +63,17 @@ jest.mock('./src/avance/epp/imagen', () => ({
   abrirFoto: jest.fn((uri: string) => jest.requireActual('./src/pruebas/epp-simulado').abrirFotoSimulada(uri)),
 }));
 
+// Avisos push (010): Firebase y el permiso de notificaciones simulados (src/pruebas/firebase-simulado.ts;
+// por defecto, Firebase configurado y el permiso sin pedir, que el usuario concede al pedírselo).
+jest.mock('@react-native-firebase/app', () => jest.requireActual('./src/pruebas/firebase-simulado').moduloApp);
+jest.mock('@react-native-firebase/messaging', () =>
+  jest.requireActual('./src/pruebas/firebase-simulado').moduloMensajeria,
+);
+jest.mock('./src/avisos/permiso', () => jest.requireActual('./src/pruebas/firebase-simulado').moduloPermiso);
+
 beforeEach(() => {
+  jest.requireActual<typeof import('./src/pruebas/firebase-simulado')>('./src/pruebas/firebase-simulado').reiniciarFirebase();
+  jest.requireActual<typeof import('./src/avisos/push')>('./src/avisos/push').olvidarFirebase();
   jest.requireActual<typeof import('./src/pruebas/epp-simulado')>('./src/pruebas/epp-simulado').simularAnalisisEpp();
   jest.requireMock<typeof import('./src/pruebas/secure-store-simulado')>(
     'expo-secure-store',

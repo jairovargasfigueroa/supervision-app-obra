@@ -40,3 +40,19 @@ Requisitos en la computadora: Node 24, JDK 17 o 21, Android SDK con la plataform
 4. Para usarla día a día: levantar `infra` y los servicios, ejecutar `infra/scripts/celular.ps1` (hace `adb reverse` de 8080, 8081, 8082 y 8090), `npm start` y abrir la app **app-obra** instalada (no Expo Go); si no se conecta sola, elegir el servidor `http://localhost:8090` en su pantalla de inicio. La vuelta del inicio de sesión llega por `appobra://iniciar-sesion`.
 
 Los modelos (`assets/modelos/*.tflite` y `epp.json`) van dentro del JavaScript que sirve Metro: si cambian, basta con recargar la app, no hace falta recompilar.
+
+## Avisos push (010: stock bajo y diario pendiente)
+
+Los avisos llegan por Firebase Cloud Messaging y solo funcionan en la *development build* compilada con el `google-services.json` del proyecto de Firebase. Ese archivo **no va en el repo** (está en `.gitignore`): se guarda fuera de la carpeta y se indica su ruta en la variable `GOOGLE_SERVICES_JSON` al generar `android/`. Sin la variable, la app compila y funciona igual, sin avisos.
+
+1. En la consola de Firebase, en el proyecto de la plataforma, agregar una app Android con el paquete `com.supervision.appobra` y descargar `google-services.json` (por ejemplo a `C:/Users/<usuario>/firebase/google-services.json`).
+2. Regenerar `android/` con el archivo (desinstalar antes del celular la *development build* anterior, que no tiene Firebase):
+
+   ```powershell
+   $env:GOOGLE_SERVICES_JSON = "C:/Users/<usuario>/firebase/google-services.json"
+   npx expo prebuild --platform android --clean
+   ```
+
+   (`--clean` borra `android/`: volver a crear `android/local.properties` del paso 2 de arriba.) Se comprueba antes con `npx expo config --type prebuild`: debe mostrar `googleServicesFile` y los *plugins* `@react-native-firebase/app` y `@react-native-firebase/messaging`.
+3. Compilar e instalar: `npx expo run:android --port 8090` (como arriba).
+4. Al entrar con señal la app pide permiso para las notificaciones (Android 13 o posterior) y se suscribe a los temas de sus obras (`obra-{obraId}-almacenero` u `obra-{obraId}-maestro`). Los avisos los envía n8n (`infra`); la prueba manual está en la última tarea de `docs/specs/010-notificaciones/tareas.md`.
