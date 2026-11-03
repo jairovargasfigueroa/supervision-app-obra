@@ -1,17 +1,23 @@
+import { waitFor } from '@testing-library/react-native';
+
 import { contenidoSecureStore } from '../pruebas/secure-store-simulado';
 import {
+  abrirDesdeNotificacion,
   fallarTemas,
   hayManejadorEnSegundoPlano,
   moduloMensajeria,
+  recibirEnPrimerPlano,
   repararTemas,
   simularPermiso,
   simularSinFirebase,
   temasEnFirebase,
+  tocarNotificacion,
   vecesQueSePidioPermiso,
 } from '../pruebas/firebase-simulado';
 import {
   actualizarAvisos,
   ESPERA_TEMA_MS,
+  escucharAvisos,
   prepararAvisosEnSegundoPlano,
   quitarTodosLosTemas,
   temasGuardados,
@@ -170,5 +176,54 @@ describe('prepararAvisosEnSegundoPlano', () => {
     simularSinFirebase();
     prepararAvisosEnSegundoPlano();
     expect(hayManejadorEnSegundoPlano()).toBe(false);
+  });
+});
+
+describe('escucharAvisos', () => {
+  const stockBajo = {
+    notification: { title: 'Stock bajo: Cemento IP-30', body: 'Edificio Las Palmas: quedan 40 bolsas (mínimo 100)' },
+    data: { tipo: 'STOCK_BAJO', obraId: 'o1' },
+  };
+
+  it('avisa el toque con la app en segundo plano y los que llegan con la app abierta', () => {
+    const alTocar = jest.fn();
+    const conLaAppAbierta = jest.fn();
+    const dejar = escucharAvisos({ alTocar, conLaAppAbierta });
+
+    tocarNotificacion(stockBajo);
+    expect(alTocar).toHaveBeenCalledWith({
+      titulo: 'Stock bajo: Cemento IP-30',
+      cuerpo: 'Edificio Las Palmas: quedan 40 bolsas (mínimo 100)',
+      datos: { tipo: 'STOCK_BAJO', obraId: 'o1' },
+    });
+    recibirEnPrimerPlano({ data: { tipo: 'DIARIO', obraId: 'o2' } });
+    expect(conLaAppAbierta).toHaveBeenCalledWith({ titulo: '', cuerpo: '', datos: { tipo: 'DIARIO', obraId: 'o2' } });
+
+    dejar();
+    tocarNotificacion(stockBajo);
+    recibirEnPrimerPlano(stockBajo);
+    expect(alTocar).toHaveBeenCalledTimes(1);
+    expect(conLaAppAbierta).toHaveBeenCalledTimes(1);
+  });
+
+  it('avisa la notificación que abrió la app desde cerrada, una sola vez', async () => {
+    abrirDesdeNotificacion(stockBajo);
+    const alTocar = jest.fn();
+    escucharAvisos({ alTocar, conLaAppAbierta: jest.fn() })();
+    const otra = jest.fn();
+    escucharAvisos({ alTocar: otra, conLaAppAbierta: jest.fn() });
+    await waitFor(() => expect(otra).toHaveBeenCalledTimes(1));
+    // La primera dejó de escuchar antes de que llegara: no la recibe.
+    expect(alTocar).not.toHaveBeenCalled();
+    expect(otra.mock.calls[0][0].datos).toEqual({ tipo: 'STOCK_BAJO', obraId: 'o1' });
+  });
+
+  it('sin Firebase no escucha nada', () => {
+    simularSinFirebase();
+    const alTocar = jest.fn();
+    const dejar = escucharAvisos({ alTocar, conLaAppAbierta: alTocar });
+    tocarNotificacion(stockBajo);
+    expect(alTocar).not.toHaveBeenCalled();
+    expect(dejar).not.toThrow();
   });
 });

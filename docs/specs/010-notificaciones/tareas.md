@@ -10,7 +10,7 @@ Marca cada tarea al terminarla (con sus pruebas y su commit).
 - [x] Aplicar «Cambios a contratos y datos» que tocan este proyecto (`docs/app.md`, `docs/contratos.md`); `google-services.json` fuera del repo y tomado de `GOOGLE_SERVICES_JSON`
 - [x] `src/avisos/temas.ts` y `rutaDeAviso.ts` (funciones puras) con sus pruebas
 - [x] `src/avisos/push.ts`: permiso, suscripción a los temas al cargar el paquete de datos, desuscripción al cerrar sesión; pruebas con `messaging` simulado
-- [ ] Abrir la pantalla al tocar el aviso y `Snackbar` con la app abierta; pruebas
+- [x] Abrir la pantalla al tocar el aviso y `Snackbar` con la app abierta; pruebas
 - [ ] Prueba manual en un Android con la *development build* (Jairo)
 
 ## Verificación de compatibilidad (02/11/2026)

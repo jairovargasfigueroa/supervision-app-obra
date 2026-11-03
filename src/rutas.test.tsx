@@ -1,4 +1,4 @@
-import { fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
+import { act, fireEvent, renderRouter, screen, waitFor } from 'expo-router/testing-library';
 
 import * as ImagePicker from 'expo-image-picker';
 
@@ -14,9 +14,12 @@ import type { PaqueteDatos } from './api/sincronizacion';
 import { agregar, listar, marcarRechazada, obtener, tomarParaEnvio } from './sync/cola';
 import { guardarPaquete, leerPaquete } from './sync/paquete';
 import {
+  abrirDesdeNotificacion,
+  recibirEnPrimerPlano,
   simularPermiso,
   simularSinFirebase,
   temasEnFirebase,
+  tocarNotificacion,
   vecesQueSePidioPermiso,
 } from './pruebas/firebase-simulado';
 import { llamadas as llamadasEpp, simularAnalisisEpp, type PersonaSimulada } from './pruebas/epp-simulado';
@@ -1303,5 +1306,62 @@ describe('avisos push: suscripción a los temas (010, criterios 7 y 8)', () => {
     expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
     expect(vecesQueSePidioPermiso()).toBe(0);
     expect(temasEnFirebase()).toEqual([]);
+  });
+});
+
+describe('avisos push: abrir la pantalla del aviso (010, criterios 3, 5 y 9)', () => {
+  const stockBajo = {
+    notification: { title: 'Stock bajo: Cemento IP-30', body: 'Edificio Las Palmas: quedan 40 bolsas (mínimo 100)' },
+    data: { tipo: 'STOCK_BAJO', obraId: 'o1' },
+  };
+  const diario = {
+    notification: {
+      title: 'Diario pendiente: Edificio Las Palmas',
+      body: 'Todavía no registraste el diario de hoy. Si ya lo registraste sin señal, se enviará al volver la señal.',
+    },
+    data: { tipo: 'DIARIO', obraId: 'o1' },
+  };
+
+  beforeEach(() => {
+    obras['GET /paquete-datos'] = () => jsonRespuesta(200, paqueteDe([OBRA_PAQUETE]));
+  });
+
+  it('el almacenero toca el aviso de stock bajo con la app en segundo plano → abre el stock de la obra', async () => {
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await act(() => tocarNotificacion(stockBajo));
+    await waitFor(() => expect(screen).toHavePathname('/obras/o1/stock'));
+    expect(
+      await screen.findByText('Esta obra todavía no tiene materiales con movimientos ni mínimo definido.'),
+    ).toBeTruthy();
+  });
+
+  it('el maestro abre la app cerrada desde el aviso del diario → abre el diario de la obra', async () => {
+    abrirDesdeNotificacion(diario);
+    await entrarCon(['maestro']);
+    await waitFor(() => expect(screen).toHavePathname('/obras/o1/diario'));
+    expect(await screen.findByText('Guardar entrada')).toBeTruthy();
+  });
+
+  it('con la app abierta muestra el aviso con «Ver», que abre la pantalla', async () => {
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await act(() => recibirEnPrimerPlano(stockBajo));
+    expect(
+      await screen.findByText('Stock bajo: Cemento IP-30\nEdificio Las Palmas: quedan 40 bolsas (mínimo 100)'),
+    ).toBeTruthy();
+    expect(screen).toHavePathname('/obras');
+    await fireEvent.press(screen.getByText('Ver'));
+    await waitFor(() => expect(screen).toHavePathname('/obras/o1/stock'));
+  });
+
+  it('un aviso sin pantalla conocida se muestra sin «Ver» y no navega', async () => {
+    await entrarCon(['almacenero']);
+    expect(await screen.findByText('Edificio Las Palmas')).toBeTruthy();
+    await act(() => recibirEnPrimerPlano({ notification: { title: 'Aviso' }, data: { tipo: 'OTRO', obraId: 'o1' } }));
+    expect(await screen.findByText('Aviso')).toBeTruthy();
+    expect(screen.queryByText('Ver')).toBeNull();
+    await act(() => tocarNotificacion({ data: { tipo: 'OTRO', obraId: 'o1' } }));
+    expect(screen).toHavePathname('/obras');
   });
 });

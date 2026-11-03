@@ -57,10 +57,14 @@ function enCola<T>(tarea: () => Promise<T>): Promise<T> {
   return resultado;
 }
 
-/** Solo para las pruebas: vuelve a buscar Firebase y vacía la cola. */
+// La notificación que abrió la app desde cerrada (`getInitialNotification`).
+let inicial: { mensaje: Promise<MensajeFcm | null>; entregada: boolean } | null = null;
+
+/** Solo para las pruebas: vuelve a buscar Firebase y vacía la cola y la notificación inicial. */
 export function olvidarFirebase(): void {
   cargado = undefined;
   cola = Promise.resolve();
+  inicial = null;
 }
 
 /** Temas a los que el celular quedó suscrito (guardados en expo-secure-store). */
@@ -161,6 +165,64 @@ export function quitarTodosLosTemas(): Promise<void> {
       await aplicarTemas(fb, []);
     }
   });
+}
+
+/** Lo que la app usa de un aviso recibido. */
+export type Aviso = {
+  titulo: string;
+  cuerpo: string;
+  /** `data { tipo, obraId }` que pone n8n. */
+  datos: Readonly<Record<string, unknown>>;
+};
+
+type MensajeFcm = {
+  notification?: { title?: string; body?: string };
+  data?: Readonly<Record<string, unknown>>;
+};
+
+function avisoDe(mensaje: MensajeFcm): Aviso {
+  return {
+    titulo: mensaje.notification?.title ?? '',
+    cuerpo: mensaje.notification?.body ?? '',
+    datos: mensaje.data ?? {},
+  };
+}
+
+type Oyentes = {
+  /** El usuario tocó la notificación (app cerrada o en segundo plano, criterios 3 y 5). */
+  alTocar: (aviso: Aviso) => void;
+  /** Llegó con la app abierta: Android no muestra la notificación (criterio 9). */
+  conLaAppAbierta: (aviso: Aviso) => void;
+};
+
+/**
+ * Escucha los avisos: el que abrió la app desde cerrada (`getInitialNotification`, se entrega una vez),
+ * los que se tocan con la app en segundo plano (`onNotificationOpenedApp`) y los que llegan con la app
+ * abierta (`onMessage`). Devuelve con qué dejar de escuchar. Sin Firebase no hace nada.
+ */
+export function escucharAvisos({ alTocar, conLaAppAbierta }: Oyentes): () => void {
+  const fb = firebase();
+  if (!fb) {
+    return () => undefined;
+  }
+  let vigente = true;
+  // Se pide una sola vez por apertura de la app y se entrega al primer oyente que siga escuchando
+  // cuando llega (si el primero dejó de escuchar antes, p. ej. al volver a montarse, no se pierde).
+  inicial ??= { mensaje: fb.modulo.getInitialNotification(fb.mensajeria).catch(() => null), entregada: false };
+  const pedida = inicial;
+  void pedida.mensaje.then((mensaje) => {
+    if (mensaje && vigente && !pedida.entregada) {
+      pedida.entregada = true;
+      alTocar(avisoDe(mensaje));
+    }
+  });
+  const dejarAbiertos = fb.modulo.onNotificationOpenedApp(fb.mensajeria, (mensaje) => alTocar(avisoDe(mensaje)));
+  const dejarAbierta = fb.modulo.onMessage(fb.mensajeria, (mensaje) => conLaAppAbierta(avisoDe(mensaje)));
+  return () => {
+    vigente = false;
+    dejarAbiertos();
+    dejarAbierta();
+  };
 }
 
 /**
