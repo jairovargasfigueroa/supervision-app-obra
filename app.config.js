@@ -1,7 +1,8 @@
-// Configuración de Expo: toma `app.json` y, solo si hay `google-services.json` de Firebase (010),
-// le agrega los avisos push. El archivo no se versiona: su ruta llega en la variable
-// GOOGLE_SERVICES_JSON al compilar la development build (`npx expo prebuild`). Sin el archivo, la app
-// compila y funciona igual, sin avisos.
+// Configuración de Expo: toma `app.json`, reemplaza las direcciones de Keycloak y de Sincronización si
+// llegan por variable al compilar (601) y, solo si hay `google-services.json` de Firebase (010), le agrega
+// los avisos push. El archivo no se versiona: su ruta llega en la variable GOOGLE_SERVICES_JSON al
+// compilar la development build (`npx expo prebuild`). Sin el archivo, la app compila y funciona igual,
+// sin avisos.
 const { existsSync } = require('node:fs');
 const { resolve } = require('node:path');
 
@@ -21,8 +22,32 @@ function archivoFirebase() {
   return ruta;
 }
 
+/** Variable de `extra` → variable de entorno que la reemplaza al compilar (601). */
+const DIRECCIONES = {
+  keycloakUrl: 'EXPO_PUBLIC_KEYCLOAK_URL',
+  sincronizacionUrl: 'EXPO_PUBLIC_SINCRONIZACION_URL',
+};
+
+/**
+ * `extra` de `app.json` con las direcciones de las variables que vienen con valor (sin espacios ni `/`
+ * final); las que faltan o están vacías quedan con el valor de desarrollo de `app.json`.
+ * @param {Record<string, unknown> | undefined} extra
+ * @param {Record<string, string | undefined>} entorno
+ */
+function extraConDirecciones(extra, entorno) {
+  const resultado = { ...extra };
+  for (const [campo, variable] of Object.entries(DIRECCIONES)) {
+    const valor = entorno[variable]?.trim().replace(/\/+$/, '');
+    if (valor) {
+      resultado[campo] = valor;
+    }
+  }
+  return resultado;
+}
+
 /** @param {import('expo/config').ConfigContext} contexto @returns {import('expo/config').ExpoConfig} */
-module.exports = ({ config }) => {
+module.exports = ({ config: base }) => {
+  const config = { ...base, extra: extraConDirecciones(base.extra, process.env) };
   const googleServicesFile = archivoFirebase();
   if (!googleServicesFile) {
     return config;
@@ -38,3 +63,5 @@ module.exports = ({ config }) => {
     plugins: [...(config.plugins ?? []), '@react-native-firebase/app', '@react-native-firebase/messaging'],
   };
 };
+
+module.exports.extraConDirecciones = extraConDirecciones;
