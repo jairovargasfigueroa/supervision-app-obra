@@ -35,6 +35,10 @@ npx expo export --platform android --output-dir <carpeta temporal fuera del repo
 - Orden: levantar `infra` y los servicios, ejecutar `infra/scripts/celular.ps1`, `npm start` y abrir en Expo Go la dirección `exp://` que muestra Metro (puerto 8090).
 - El esquema propio es `appobra` (`app.json` → `scheme`). En Expo Go la vuelta del inicio de sesión llega por `exp://…`; en un *development build*, por `appobra://…`. El realm acepta los dos (`exp://*` y `appobra://*`).
 
+### Direcciones al compilar (601)
+
+- `EXPO_PUBLIC_KEYCLOAK_URL` y `EXPO_PUBLIC_SINCRONIZACION_URL` (en la terminal o en `.env`, copia de `.env.example`) reemplazan en `app.config.js` las de `app.json` → `extra`; sin ellas, las de desarrollo (`localhost`). El APK lo genera Jairo cuando lo necesite, fuera de la 601. CI en `.github/workflows/ci.yml` (tipos y pruebas).
+
 ## Estructura
 
 La exacta está en `docs/estructura.md`. En resumen:
