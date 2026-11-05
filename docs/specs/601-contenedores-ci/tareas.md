@@ -6,4 +6,4 @@ Marca cada tarea al terminarla (con sus pruebas y su commit).
 
 - [x] Aplicar «Cambios a contratos y datos» que tocan este proyecto (`docs/`, `CLAUDE.md`, `.env.example`)
 - [x] `EXPO_PUBLIC_KEYCLOAK_URL` y `EXPO_PUBLIC_SINCRONIZACION_URL` en `app.config.js` (por defecto las de desarrollo); pruebas
-- [ ] `.github/workflows/ci.yml`: `npm ci`, `npx tsc --noEmit` y `npx jest` (sin imagen)
+- [x] `.github/workflows/ci.yml`: `npm ci`, `npx tsc --noEmit` y `npx jest` (sin imagen)
