@@ -1,9 +1,14 @@
 import {
   formatearCantidad,
+  fechaLaPaz,
+  formatearCantidadMaterial,
+  formatearDiaMes,
+  restarDias,
   formatearFecha,
   formatearFechaHora,
   formatearMonto,
   formatearPorcentaje,
+  periodoLaPaz,
 } from './formato';
 
 describe('formato', () => {
@@ -49,8 +54,31 @@ describe('formato', () => {
     expect(formatearFechaHora('2026-11-15T14:30:00-04:00')).toBe('15/11/2026 14:30');
   });
 
+  it('periodo AAAA-MM en hora de La Paz', () => {
+    expect(periodoLaPaz('2026-11-15T14:00:00Z')).toBe('2026-11');
+    // 1 de diciembre a las 02:00 UTC todavía es 30 de noviembre en La Paz.
+    expect(periodoLaPaz('2026-12-01T02:00:00Z')).toBe('2026-11');
+    expect(periodoLaPaz('2027-01-01T04:00:00Z')).toBe('2027-01');
+  });
+
+  it('cantidad de un material con la unidad en singular o plural', () => {
+    expect(formatearCantidadMaterial(1, 'bolsa', 'bolsas')).toBe('1 bolsa');
+    expect(formatearCantidadMaterial(12.5, 'bolsa', 'bolsas')).toBe('12,5 bolsas');
+    expect(formatearCantidadMaterial(0, 'bolsa', 'bolsas')).toBe('0 bolsas');
+  });
+
   it('rechaza valores no válidos', () => {
     expect(() => formatearMonto(Number.NaN)).toThrow(RangeError);
     expect(() => formatearFechaHora('no es fecha')).toThrow(RangeError);
+  });
+});
+
+describe('fechas del diario (103)', () => {
+  it('el día en La Paz, días hacia atrás y dd/mm', () => {
+    expect(fechaLaPaz('2026-11-16T03:30:00Z')).toBe('2026-11-15');
+    expect(fechaLaPaz('2026-11-16T04:00:00Z')).toBe('2026-11-16');
+    expect(restarDias('2026-03-01', 1)).toBe('2026-02-28');
+    expect(restarDias('2026-01-03', 7)).toBe('2025-12-27');
+    expect(formatearDiaMes('2026-11-05')).toBe('05/11');
   });
 });

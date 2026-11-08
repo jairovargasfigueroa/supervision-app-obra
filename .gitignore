@@ -32,6 +32,8 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
+!.env.example
 
 # typescript
 *.tsbuildinfo
@@ -44,3 +46,7 @@ yarn-error.*
 .env
 .env.*
 !.env.example
+
+# Firebase (010): configuración del proyecto de Firebase, fuera del repo (ruta en GOOGLE_SERVICES_JSON)
+google-services.json
+GoogleService-Info.plist

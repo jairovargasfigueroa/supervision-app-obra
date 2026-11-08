@@ -85,3 +85,41 @@ export function formatearFechaHora(instante: string | Date): string {
   const laPaz = enLaPaz(instante);
   return `${fechaDe(laPaz)} ${dosDigitos(laPaz.getUTCHours())}:${dosDigitos(laPaz.getUTCMinutes())}`;
 }
+
+/** El día en La Paz de un instante, como `AAAA-MM-DD`. */
+export function fechaLaPaz(instante: string | Date): string {
+  const laPaz = enLaPaz(instante);
+  return `${laPaz.getUTCFullYear()}-${dosDigitos(laPaz.getUTCMonth() + 1)}-${dosDigitos(laPaz.getUTCDate())}`;
+}
+
+/** `AAAA-MM-DD` menos `dias` días (calendario, sin zonas). */
+export function restarDias(fecha: string, dias: number): string {
+  const [anio, mes, dia] = fecha.split('-').map(Number) as [number, number, number];
+  const d = new Date(Date.UTC(anio, mes - 1, dia - dias));
+  return `${d.getUTCFullYear()}-${dosDigitos(d.getUTCMonth() + 1)}-${dosDigitos(d.getUTCDate())}`;
+}
+
+/** `2026-11-15` → `15/11`. */
+export function formatearDiaMes(fecha: string): string {
+  const [, mes, dia] = fecha.split('-');
+  return `${dia}/${mes}`;
+}
+
+/** `15/11 14:30` en hora de La Paz (día y mes, sin el año). */
+export function formatearDiaHora(instante: string | Date): string {
+  const laPaz = enLaPaz(instante);
+  return `${dosDigitos(laPaz.getUTCDate())}/${dosDigitos(laPaz.getUTCMonth() + 1)} ${dosDigitos(
+    laPaz.getUTCHours(),
+  )}:${dosDigitos(laPaz.getUTCMinutes())}`;
+}
+
+/** Periodo `AAAA-MM`: el mes del instante en La Paz (como lo calcula Materiales, diseño 004). */
+export function periodoLaPaz(instante: string | Date): string {
+  const laPaz = enLaPaz(instante);
+  return `${laPaz.getUTCFullYear()}-${dosDigitos(laPaz.getUTCMonth() + 1)}`;
+}
+
+/** Cantidad de un material con su unidad en singular o plural: `1 bolsa`, `12,5 bolsas`, `0 bolsas`. */
+export function formatearCantidadMaterial(cantidad: number, unidad: string, unidadPlural: string): string {
+  return formatearCantidad(cantidad, cantidad === 1 ? unidad : unidadPlural);
+}
