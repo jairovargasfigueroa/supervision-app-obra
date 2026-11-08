@@ -41,6 +41,20 @@ Requisitos en la computadora: Node 24, JDK 17 o 21, Android SDK con la plataform
 
 Los modelos (`assets/modelos/*.tflite` y `epp.json`) van dentro del JavaScript que sirve Metro: si cambian, basta con recargar la app, no hace falta recompilar.
 
+## APK para la nube (602)
+
+Para usar la app contra la plataforma desplegada en la nube (Keycloak en Azure, Sincronización en AWS), sin Metro ni la computadora: un APK de *release* con las direcciones de la nube dentro, firmado con la misma clave de depuración de la plantilla de Expo que la *development build* (se instala encima, sin desinstalar).
+
+```powershell
+./scripts/apk-nube.ps1 -Instalar                                    # compila y lo instala en el celular conectado
+./scripts/apk-nube.ps1 -Limpiar -GoogleServices C:/ruta/google-services.json -Instalar   # con avisos push (010)
+```
+
+- Las direcciones por defecto son `https://keycloak.supervision.workflow-tramites.site` y `https://sincronizacion.supervision.workflow-tramites.site` (`-Keycloak` y `-Sincronizacion` para otras). Se escriben en la app al compilar (`EXPO_PUBLIC_KEYCLOAK_URL` y `EXPO_PUBLIC_SINCRONIZACION_URL`, 601).
+- `-Limpiar` regenera `android/` (hace falta la primera vez con Firebase o si cambia una dependencia nativa) y el *script* vuelve a crear `android/local.properties` con CMake 3.31.6.
+- Queda en `dist/app-obra-nube.apk` (fuera del repo). Para otro celular, se pasa el archivo y se instala permitiendo «orígenes desconocidos». Con los requisitos de compilación de la sección anterior.
+- Para volver a desarrollo (Metro y `localhost`), se instala otra vez la *development build* (`npx expo run:android --port 8090`).
+
 ## Avisos push (010: stock bajo y diario pendiente)
 
 Los avisos llegan por Firebase Cloud Messaging y solo funcionan en la *development build* compilada con el `google-services.json` del proyecto de Firebase. Ese archivo **no va en el repo** (está en `.gitignore`): se guarda fuera de la carpeta y se indica su ruta en la variable `GOOGLE_SERVICES_JSON` al generar `android/`. Sin la variable, la app compila y funciona igual, sin avisos.

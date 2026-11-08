@@ -37,7 +37,7 @@ npx expo export --platform android --output-dir <carpeta temporal fuera del repo
 
 ### Direcciones al compilar (601)
 
-- `EXPO_PUBLIC_KEYCLOAK_URL` y `EXPO_PUBLIC_SINCRONIZACION_URL` (en la terminal o en `.env`, copia de `.env.example`) reemplazan en `app.config.js` las de `app.json` → `extra`; sin ellas, las de desarrollo (`localhost`). El APK lo genera Jairo cuando lo necesite, fuera de la 601. CI en `.github/workflows/ci.yml` (tipos y pruebas).
+- `EXPO_PUBLIC_KEYCLOAK_URL` y `EXPO_PUBLIC_SINCRONIZACION_URL` (en la terminal o en `.env`, copia de `.env.example`) reemplazan en `app.config.js` las de `app.json` → `extra`; sin ellas, las de desarrollo (`localhost`). CI en `.github/workflows/ci.yml` (tipos y pruebas). 602: `scripts/apk-nube.ps1` compila el APK de release con las direcciones de la nube (y `-Instalar` lo instala por cable); README, «APK para la nube».
 
 ## Estructura
 

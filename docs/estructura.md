@@ -110,6 +110,8 @@ src/
                    epp-simulado.ts (modelos y foto simulados del análisis de casco y chaleco, 301),
                    firebase-simulado.ts (@react-native-firebase/app y messaging y el permiso de notificaciones, 010)
   tema.ts
+scripts/
+  apk-nube.ps1     (602) APK de release que apunta a la nube (EXPO_PUBLIC_*, GOOGLE_SERVICES_JSON opcional) en dist/
 ```
 
 ## Sesión (001)
