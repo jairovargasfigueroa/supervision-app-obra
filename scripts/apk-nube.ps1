@@ -1,4 +1,4 @@
-# 602 · Compila el APK de la app que apunta a la nube (Keycloak en Azure y Sincronización en AWS) y, con -Instalar, lo
+﻿# 602 · Compila el APK de la app que apunta a la nube (Keycloak en Azure y Sincronización en AWS) y, con -Instalar, lo
 # instala por cable. Es un APK de release firmado con la clave de depuración de la plantilla de Expo (la misma de la
 # development build: se instala encima). El JavaScript va dentro del APK: no necesita Metro ni la computadora.
 # Uso (desde mobile/app-obra):
@@ -21,6 +21,12 @@ Set-Location $raiz
 
 function Paso([string]$Texto) { Write-Host ''; Write-Host "== $Texto" -ForegroundColor Cyan }
 function Detener([string]$Texto) { Write-Host ''; Write-Host "ERROR: $Texto" -ForegroundColor Red; exit 1 }
+# Los programas externos (npx, gradlew, adb) escriben avisos en stderr: con la salida redirigida (por ejemplo a un
+# archivo), PowerShell 5.1 los convierte en errores y 'Stop' cortaría el script. Se juzgan por $LASTEXITCODE.
+function Externo([scriptblock]$Comando) {
+    $ErrorActionPreference = 'Continue'
+    & $Comando 2>&1 | ForEach-Object { "$_" }
+}
 
 # Las direcciones las lee app.config.js al compilar (601) y quedan dentro del APK
 $env:EXPO_PUBLIC_KEYCLOAK_URL = $Keycloak.TrimEnd('/')
@@ -40,7 +46,7 @@ if ($Limpiar -or -not (Test-Path 'android')) {
     Paso 'Carpeta android/ (npx expo prebuild)'
     $argumentos = @('expo', 'prebuild', '--platform', 'android')
     if ($Limpiar) { $argumentos += '--clean' }
-    & npx.cmd @argumentos
+    Externo { npx.cmd @argumentos }
     if ($LASTEXITCODE -ne 0) { Detener 'npx expo prebuild falló (salida de arriba).' }
 }
 # CMake 3.31.6 para las rutas largas de C++ en Windows (README, paso 2); prebuild --clean borra este archivo
@@ -56,7 +62,7 @@ if (-not (Test-Path $propiedades)) {
 Paso "APK de release ($Arquitecturas)"
 Push-Location 'android'
 try {
-    & .\gradlew.bat assembleRelease "-PreactNativeArchitectures=$Arquitecturas"
+    Externo { .\gradlew.bat assembleRelease "-PreactNativeArchitectures=$Arquitecturas" }
     if ($LASTEXITCODE -ne 0) { Detener 'gradlew assembleRelease falló (salida de arriba).' }
 } finally { Pop-Location }
 $apk = 'android/app/build/outputs/apk/release/app-release.apk'
@@ -70,7 +76,7 @@ if ($Instalar) {
     Paso 'Instalar en el celular conectado por USB'
     $adb = Join-Path $env:LOCALAPPDATA 'Android/Sdk/platform-tools/adb.exe'
     if (-not (Test-Path $adb)) { $adb = 'adb' }
-    & $adb install -r 'dist/app-obra-nube.apk'
+    Externo { & $adb install -r 'dist/app-obra-nube.apk' }
     if ($LASTEXITCODE -ne 0) {
         Detener 'adb install falló. Si dice INSTALL_FAILED_UPDATE_INCOMPATIBLE, desinstala antes la app del celular (otra firma).'
     }
